@@ -29,6 +29,16 @@ const cache = new Map();
 const native = window.CommitsAndroid;
 const syncNative = () => native?.postMessage(JSON.stringify({ token, pins }));
 
+// Merge notifications live in the Android app; it tells us whether they're really on (permission can be denied).
+let notifyOn = store.get('notify', false);
+if (native) native.onmessage = e => {
+  const data = JSON.parse(e.data);
+  if (typeof data.notify !== 'boolean') return;
+  notifyOn = data.notify;
+  store.set('notify', notifyOn);
+  document.getElementById('notify')?.setAttribute('aria-checked', notifyOn);
+};
+
 // ---------- helpers ----------
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const enc = encodeURIComponent;
@@ -459,9 +469,23 @@ async function settingsView(stale) {
     <div class="list fade">
       <div class="row"><div class="row-main">${pins.length ? pins.map(esc).join('<br>') : '<span class="row-desc">Tap the star on a repo to pin it to the top.</span>'}</div></div>
     </div>
+    ${native ? `
+    <div class="section-label">Notifications</div>
+    <div class="list fade">
+      <button class="row switch-row" id="notify" role="switch" aria-checked="${notifyOn}">
+        <div class="row-main"><div class="row-title">Merged pull requests</div>
+          <div class="row-desc">Notify me when a PR is merged in a pinned repo. Checked about every 15 minutes.</div></div>
+        <span class="switch" aria-hidden="true"></span>
+      </button>
+    </div>` : ''}
     <div class="list fade" style="margin-top:24px">
       <button class="row danger" id="out">Sign out</button>
     </div>`;
+  const notify = document.getElementById('notify');
+  if (notify) notify.onclick = () => {
+    notify.setAttribute('aria-checked', !notifyOn); // the app confirms (or reverts) once Android answers
+    native.postMessage(JSON.stringify({ notify: !notifyOn }));
+  };
   document.getElementById('out').onclick = () => {
     if (!confirm('Sign out and remove the token from this device?')) return;
     signOut();

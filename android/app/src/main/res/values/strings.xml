@@ -12,4 +12,7 @@
     <string name="widget_no_commits">No commits in your pinned repos yet</string>
     <string name="refresh">Refresh</string>
     <string name="yesterday">Yesterday</string>
+    <string name="merges_channel">Merged pull requests</string>
+    <string name="merges_channel_description">Pull requests merged in your pinned repos</string>
+    <string name="merges_text">%1$s · merged into %2$s · %3$s</string>
 </resources>

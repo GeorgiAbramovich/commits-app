@@ -1,6 +1,9 @@
 package io.github.georgiabramovich.commits
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -10,8 +13,10 @@ import android.widget.FrameLayout
 import androidx.activity.ComponentActivity
 import androidx.activity.addCallback
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.webkit.JavaScriptReplyProxy
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewClientCompat
 import androidx.webkit.WebViewCompat
@@ -22,6 +27,11 @@ import org.json.JSONObject
 class MainActivity : ComponentActivity() {
 
     private lateinit var web: WebView
+    private var page: JavaScriptReplyProxy? = null
+
+    private val askToNotify = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        setNotify(granted)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -58,15 +68,26 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // The page posts {token, pins} whenever they change; only our own origin can reach this.
+        // The page posts {token, pins} whenever they change, and {notify} from Settings; only our own
+        // origin can reach this. We answer with {notify} so the switch shows whether it's really on.
         if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
-            WebViewCompat.addWebMessageListener(web, "CommitsAndroid", setOf("https://$HOST")) { _, message, _, _, _ ->
+            WebViewCompat.addWebMessageListener(web, "CommitsAndroid", setOf("https://$HOST")) { _, message, _, _, reply ->
+                page = reply
                 val data = JSONObject(message.data ?: return@addWebMessageListener)
+                if (data.has("notify")) {
+                    when {
+                        !data.getBoolean("notify") -> setNotify(false)
+                        canNotify() -> setNotify(true)
+                        else -> askToNotify.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    }
+                    return@addWebMessageListener
+                }
                 WidgetData.saveSession(
                     this,
                     token = data.optString("token").takeIf { !data.isNull("token") && it.isNotEmpty() },
                     pins = data.optJSONArray("pins")?.let { arr -> List(arr.length()) { arr.getString(it) } }.orEmpty(),
                 )
+                reply.postMessage(JSONObject().put("notify", MergeWatcher.isEnabled(this)).toString())
             }
         }
 
@@ -88,6 +109,15 @@ class MainActivity : ComponentActivity() {
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         web.saveState(outState)
+    }
+
+    private fun canNotify() =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+
+    private fun setNotify(on: Boolean) {
+        MergeWatcher.setEnabled(this, on)
+        page?.postMessage(JSONObject().put("notify", MergeWatcher.isEnabled(this)).toString())
     }
 
     private fun Intent.hashExtra() = getStringExtra(EXTRA_HASH)?.takeIf { it.startsWith("#/") }.orEmpty()
