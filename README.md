@@ -16,6 +16,7 @@ No backend, no build step, no tracking: just static files that talk to `api.gith
 - Commits grouped by day, with a branch picker and "load older"
 - Commit details with expandable, colored diffs
 - Installable on Android: pull to refresh, system back gesture, light and dark theme, opens offline
+- Optional native Android app with a home screen widget of the newest commits in your pinned repos
 
 ## Install on Android
 
@@ -24,6 +25,35 @@ No backend, no build step, no tracking: just static files that talk to `api.gith
 3. Open **Commits** from your home screen and paste a token (see [Token](#token)).
 
 On iPhone, open the URL in Safari, tap **Share**, then **Add to Home Screen**.
+
+## Android app and widget
+
+Browsers can't put web apps on the home screen as widgets, so [`android/`](android) wraps the same web app
+in a small native app and adds a **Pinned commits** widget:
+
+- The newest commits (up to 100) across the repos you starred in the app, newest first
+- Each author has their own color: a dot, their name and a soft tint on their commit's card. People shown together never share a color
+- Today's commits show relative time, then **Yesterday**, then the date
+- With one pinned repo, its name becomes the widget title
+- Refreshes every 30 minutes, when you pin or unpin a repo, and with the ↻ button; tap a commit to open it in the app
+- Follows your wallpaper colors (Material You) and light/dark mode, and can be resized
+
+There are no prebuilt downloads yet, so build it yourself. You need [Android Studio](https://developer.android.com/studio) (for its JDK and the Android SDK)
+and a phone with Android 12 or newer and USB debugging on:
+
+```sh
+cd android
+export JAVA_HOME="<Android Studio>/jbr"   # e.g. "/c/Program Files/Android/Android Studio/jbr" on Windows
+./gradlew assembleDebug
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+Then open **Commits**, paste your token, star the repos you want, and add the widget: long-press the home screen,
+choose **Widgets**, then **Commits**.
+
+The build copies the web app from the repo root into the APK, so there's one codebase. The app talks to the widget only
+from its own pages, and the widget calls the same GitHub API with the same token. The token is kept in the app's
+private storage, which Android doesn't back up.
 
 ## Token
 
@@ -41,7 +71,7 @@ on the [tokens page](https://github.com/settings/tokens), choose **Configure SSO
 
 ## Privacy
 
-- Your token is stored in your browser's `localStorage` on your device. It is never sent anywhere except `api.github.com`.
+- Your token is stored in your browser's `localStorage` on your device (and, in the Android app, in its private storage for the widget). It is never sent anywhere except `api.github.com`.
 - The app makes no other requests besides loading avatar images from `avatars.githubusercontent.com`.
 - No analytics, no cookies, no server. The service worker caches only the app's own files, never API responses.
 - **Settings → Sign out** deletes the token from the device. You can also revoke it on GitHub at any time.
@@ -76,6 +106,7 @@ When you change any cached file for a release, bump `CACHE` in [`sw.js`](sw.js) 
 | `style.css`            | Theme tokens (light and dark) and components         |
 | `sw.js`                | Offline cache for the app shell                      |
 | `manifest.webmanifest` | Install metadata: icons, screenshots, colors         |
+| `android/`             | Native Android wrapper and home screen widget        |
 
 ## Contributing
 
