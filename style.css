@@ -17,6 +17,13 @@
   --del: #c4373a;
   --del-bg: #fde8e7;
   --star: #c98a00;
+  /* Commit detail: tonal steps off --bg instead of outlines */
+  --card: #f0ecf6;
+  --well: #f7f4fb;
+  --chip: rgba(255, 255, 255, .72);
+  --add-line: #e4f4e9;
+  --del-line: #fce8e7;
+  --muted-wash: #5d5c6c;
   --radius: 20px;
   --sans: Roboto, system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: "Roboto Mono", ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, "Droid Sans Mono", monospace;
@@ -42,6 +49,12 @@
     --del: #ff8a84;
     --del-bg: #3d1a1a;
     --star: #ffc94a;
+    --card: #211f27;
+    --well: #19181e;
+    --chip: rgba(255, 255, 255, .09);
+    --add-line: #1a2e24;
+    --del-line: #321e21;
+    --muted-wash: #b8b5c8;
     color-scheme: dark;
   }
 }
@@ -197,44 +210,92 @@ main {
 
 .more { display: flex; align-items: center; justify-content: center; width: 100%; height: 48px; margin-top: 16px; border-radius: 999px; background: var(--accent-soft); color: var(--on-accent-soft); font-size: 14px; font-weight: 500; }
 
-/* Commit detail */
+/* Author colors. Rows and the commit card carry --al/--ad (author light/dark) and --wl/--wd (their
+   washes over white and #1C1B1F, as in the widget) inline; these pick the pair for the scheme. */
+.commit, .timeline .row { --a: var(--al, var(--accent)); --wash: var(--wl, var(--surface-2)); }
+.timeline .row .who { color: var(--a); }
+@media (prefers-color-scheme: dark) {
+  .commit, .timeline .row { --a: var(--ad, var(--accent)); --wash: var(--wd, var(--surface-2)); }
+}
+
+/* Commit detail: tonal cards on the page tone, no outlines, like the widget. */
 .card { background: var(--surface); border-radius: var(--radius); border: 1px solid var(--line); padding: 20px; }
-.detail-title { font-size: 22px; font-weight: 500; line-height: 28px; overflow-wrap: anywhere; margin: 0; }
-.detail-body { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--muted); font-size: 14px; line-height: 20px; margin: 12px 0 0; }
-.author { display: flex; align-items: center; gap: 12px; margin-top: 20px; }
-.author b { display: block; font-weight: 500; }
-.author small { color: var(--muted); font-size: 13px; }
-.actions { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+.commit {
+  background: var(--wash); border-radius: 24px; padding: 18px 20px 20px; margin-top: 4px;
+  --muted: var(--muted-wash);
+}
+.skel-commit { height: 220px; background: linear-gradient(90deg, transparent, var(--surface-2), transparent) var(--card); background-size: 200% 100%; animation: shimmer 1.2s infinite; }
+.author { display: flex; align-items: center; gap: 12px; }
+.author .avatar { width: 40px; height: 40px; box-shadow: 0 0 0 2px var(--wash), 0 0 0 4px var(--a); margin: 4px; }
+.author .avatar.ph { background: var(--a); color: var(--wash); }
+.author-text { min-width: 0; }
+.author b { display: block; font-weight: 500; font-size: 15px; line-height: 20px; color: var(--a); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.author small { display: block; color: var(--muted); font-size: 13px; line-height: 18px; }
+.detail-title { font-size: 22px; font-weight: 500; line-height: 28px; overflow-wrap: anywhere; margin: 16px 0 0; letter-spacing: -.01em; }
+.detail-body { margin-top: 10px; font-size: 15px; line-height: 22px; color: var(--text); overflow-wrap: anywhere; }
+.detail-body p { margin: 0; white-space: pre-wrap; }
+.detail-body ul { margin: 0; padding-left: 22px; }
+.detail-body li + li { margin-top: 4px; }
+.detail-body li::marker { color: var(--a); }
+.detail-body > :not(:first-child) { margin-top: 12px; }
+.actions { display: flex; gap: 8px; margin-top: 18px; flex-wrap: wrap; }
 .pill { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 16px 0 12px; border-radius: 999px; border: 1px solid var(--line); font-size: 14px; font-weight: 500; color: var(--text); }
 .pill svg { width: 18px; height: 18px; color: var(--accent); }
-.pill.mono { font-family: var(--mono); font-size: 13px; font-weight: 400; }
-.stats { display: flex; gap: 12px; align-items: center; color: var(--muted); }
+.commit .pill { border: 0; background: var(--chip); }
+.commit .pill svg { color: var(--a); }
+.pill.mono { font-family: var(--mono); font-size: 13px; font-weight: 500; }
+
+.stats { display: flex; gap: 12px; align-items: center; color: var(--muted); font-size: 14px; line-height: 20px; font-weight: 500; margin: 20px 4px 10px 16px; min-height: 40px; }
 .add { color: var(--add); font-weight: 500; }
 .del { color: var(--del); font-weight: 500; }
 .bars { display: inline-flex; gap: 2px; }
 .bars i { width: 8px; height: 8px; border-radius: 2px; background: var(--surface-3); }
 .bars i.a { background: var(--add); }
 .bars i.d { background: var(--del); }
+.toggle-all { margin-left: auto; height: 40px; padding: 0 12px; border-radius: 999px; color: var(--accent); font-size: 14px; font-weight: 500; position: relative; overflow: hidden; isolation: isolate; }
 
-.file { border-top: 1px solid var(--line); }
-.file:first-child { border-top: 0; }
-.file summary { list-style: none; display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 12px 16px; cursor: pointer; font-size: 13px; }
+/* Changed files: one tonal card each, stacked with the widget's 8px rhythm */
+.files { display: flex; flex-direction: column; gap: 8px; }
+.file { background: var(--card); border-radius: 16px; overflow: hidden; }
+.file summary { list-style: none; display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 10px 8px 10px 14px; cursor: pointer; }
 .file summary::-webkit-details-marker { display: none; }
 .file .fname { flex: 1; min-width: 0; font-family: var(--mono); font-size: 13px; line-height: 18px; font-weight: 500; overflow-wrap: anywhere; }
-.file .fname em { display: block; overflow-wrap: break-word; color: var(--muted); font-style: normal; font-size: 11.5px; line-height: 16px; font-weight: 400; margin-top: 2px; }
-.file .chev { width: 18px; height: 18px; color: var(--muted); transition: transform .2s var(--ease); flex: none; }
-.file[open] .chev { transform: rotate(90deg); }
-.status { width: 22px; height: 22px; border-radius: 6px; font-size: 11px; font-weight: 700; display: grid; place-items: center; flex: none; font-family: var(--mono); }
+.file .fname em { display: block; overflow-wrap: break-word; color: var(--muted); font-family: var(--sans); font-style: normal; font-size: 12px; line-height: 16px; font-weight: 400; margin-top: 2px; }
+.file .counts { display: flex; flex-direction: column; align-items: flex-end; font: 500 12px/16px var(--mono); flex: none; }
+.file .chev { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; flex: none; background: var(--chip); color: var(--text); }
+.file .chev svg { width: 20px; height: 20px; transition: transform .2s var(--ease); }
+.file[open] .chev svg { transform: rotate(180deg); }
+.status { width: 24px; height: 24px; border-radius: 8px; font-size: 11px; font-weight: 700; display: grid; place-items: center; flex: none; font-family: var(--mono); }
 .status.added { background: var(--add-bg); color: var(--add); }
 .status.removed { background: var(--del-bg); color: var(--del); }
 .status.modified, .status.changed { background: var(--accent-soft); color: var(--on-accent-soft); }
-.status.renamed, .status.copied { background: var(--surface-2); color: var(--muted); }
-.patch { margin: 0; overflow-x: auto; font: 12px/1.6 var(--mono); background: var(--bg); border-top: 1px solid var(--line); padding: 6px 0; overscroll-behavior-x: contain; }
-.patch div { padding: 0 16px; white-space: pre; min-width: max-content; }
-.patch .pa { background: var(--add-bg); color: var(--add); }
-.patch .pd { background: var(--del-bg); color: var(--del); }
-.patch .ph { color: var(--muted); background: var(--surface-2); margin: 4px 0; }
-.patch-empty { padding: 12px 16px; color: var(--muted); font-size: 13px; border-top: 1px solid var(--line); }
+.status.renamed, .status.copied { background: var(--surface-3); color: var(--text); }
+
+/* Diffs: code stays in the text color; only the gutter mark and a soft line wash carry red/green. */
+.patch {
+  background: var(--well); padding: 8px 0;
+  font: 13px/20px var(--mono); font-variant-ligatures: none; tab-size: 4; -moz-tab-size: 4;
+}
+.pl { display: flex; color: var(--text); }
+.pl i { flex: none; width: 28px; text-align: center; font-style: normal; font-weight: 700; user-select: none; -webkit-user-select: none; }
+.pl code {
+  flex: 1; min-width: 0; font: inherit; padding-right: 14px;
+  white-space: pre-wrap; overflow-wrap: anywhere;
+  /* Hanging indent: wrapped parts start two columns right of the line's own indentation. */
+  padding-left: calc(var(--i, 0ch) + 2ch); text-indent: calc(-1 * (var(--i, 0ch) + 2ch));
+}
+.pl.pa { background: var(--add-line); }
+.pl.pa i { color: var(--add); }
+.pl.pd { background: var(--del-line); }
+.pl.pd i { color: var(--del); }
+/* In a new or deleted file every line is + or −: the gutter says it, the wash would only shout. */
+.file.added .pl.pa, .file.removed .pl.pd { background: none; }
+.ph, .pn { padding: 0 14px 0 28px; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.ph { margin: 10px 0 4px; }
+.ph:first-child { margin-top: 2px; }
+.ph .where { font-family: var(--sans); }
+.pn { font-family: var(--sans); font-style: italic; }
+.patch-empty { padding: 12px 16px 14px 50px; color: var(--muted); font-size: 13px; background: var(--well); }
 
 /* Setup */
 .hero { padding: 40px 8px 8px; }
@@ -272,7 +333,7 @@ main {
 @keyframes fade { from { opacity: 0; transform: translateY(6px); } }
 
 @media (prefers-reduced-motion: reduce) {
-  .fade, .ripple, .skel { animation: none; }
+  .fade, .ripple, .skel, .skel-commit { animation: none; }
   .ripple { display: none; }
-  .toast, .ptr.settle, .bar, .file .chev { transition: none; }
+  .toast, .ptr.settle, .bar, .file .chev svg { transition: none; }
 }

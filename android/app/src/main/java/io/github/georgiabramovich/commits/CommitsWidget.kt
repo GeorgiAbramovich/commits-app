@@ -128,11 +128,12 @@ class CommitsWidget : AppWidgetProvider() {
                 ),
             )
 
-            val colors = authorColors(commits.map { it.author })
+            val slots = authorSlots(commits.map { it.author })
             val items = RemoteViews.RemoteCollectionItems.Builder().setViewTypeCount(1)
             commits.forEachIndexed { i, c ->
                 val row = RemoteViews(ctx.packageName, R.layout.widget_row)
-                val (light, dark) = colors.getValue(c.author)
+                val slot = slots.getValue(c.author)
+                val (light, dark) = AUTHOR_COLORS[slot]
                 row.setColorStateList(
                     R.id.row, "setBackgroundTintList",
                     ColorStateList.valueOf(ColorUtils.blendARGB(CARD_LIGHT, light, 0.16f)),
@@ -147,7 +148,8 @@ class CommitsWidget : AppWidgetProvider() {
                 row.setTextViewText(R.id.message, c.title)
                 row.setOnClickFillInIntent(
                     R.id.row,
-                    Intent().putExtra(MainActivity.EXTRA_HASH, "#/c/${c.repo.split('/').joinToString("/") { Uri.encode(it) }}/${c.sha}"),
+                    // The app tints the commit screen with the same color this card shows.
+                    Intent().putExtra(MainActivity.EXTRA_HASH, "#/c/${c.repo.split('/').joinToString("/") { Uri.encode(it) }}/${c.sha}?tint=$slot"),
                 )
                 items.addItem(i.toLong(), row)
             }
@@ -172,6 +174,7 @@ class CommitsWidget : AppWidgetProvider() {
         private const val CARD_DARK = 0xFF1C1B1F.toInt()
 
         // Each author keeps one color: a deep shade for light mode and a soft one for dark mode.
+        // app.js has the same list, hash and probing (AUTHOR_COLORS there): keep them in sync.
         // All pairs measure >= 4.5:1 against the row surface (tone 90 light / tone 20 dark).
         private val AUTHOR_COLORS = listOf(
             0xFF00695C to 0xFF4DB6AC, // teal
@@ -189,17 +192,17 @@ class CommitsWidget : AppWidgetProvider() {
         /**
          * Each author starts from a color derived from their name, so it stays the same across refreshes.
          * If someone else in the list already has it, they take the next free one, so up to
-         * [AUTHOR_COLORS].size people on screen never share a color.
+         * [AUTHOR_COLORS].size people on screen never share a color. Returns each author's index.
          */
-        private fun authorColors(authors: List<String>): Map<String, Pair<Int, Int>> {
+        private fun authorSlots(authors: List<String>): Map<String, Int> {
             val taken = BooleanArray(AUTHOR_COLORS.size)
-            val result = mutableMapOf<String, Pair<Int, Int>>()
+            val result = mutableMapOf<String, Int>()
             for (author in authors.distinct()) {
                 var slot = Math.floorMod(author.lowercase().hashCode(), AUTHOR_COLORS.size)
                 if (taken.all { it }) taken.fill(false)
                 while (taken[slot]) slot = (slot + 1) % AUTHOR_COLORS.size
                 taken[slot] = true
-                result[author] = AUTHOR_COLORS[slot]
+                result[author] = slot
             }
             return result
         }

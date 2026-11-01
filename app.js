@@ -69,6 +69,58 @@ const LANG = { JavaScript: '#f1e05a', TypeScript: '#3178c6', Python: '#3572a5', 
 
 const skeleton = n => `<div class="list">${'<div class="skel"></div>'.repeat(n)}</div>`;
 
+// ---------- author colors ----------
+// Shared with the home screen widget (CommitsWidget.kt): same pairs, same hash, same probing,
+// so a person keeps one color everywhere. Each pair is a deep shade for light mode and a soft
+// one for dark mode; cards get a wash of it over white / #1C1B1F.
+const AUTHOR_COLORS = [
+  ['#00695c', '#4db6ac'], // teal
+  ['#b23c00', '#ffb74d'], // orange
+  ['#ad1457', '#f48fb1'], // pink
+  ['#1259b5', '#64b5f6'], // blue
+  ['#6a1b9a', '#ce93d8'], // purple
+  ['#236c28', '#81c784'], // green
+  ['#7a5c00', '#ffd54f'], // amber
+  ['#3949ab', '#9fa8da'], // indigo
+  ['#b71c1c', '#ef9a9a'], // red
+  ['#006874', '#4dd0e1'], // cyan
+];
+
+// Java's String.hashCode() (32-bit overflow) on the lowercased name, then Math.floorMod.
+function authorSlot(author) {
+  const s = String(author).toLowerCase();
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
+  return ((h % AUTHOR_COLORS.length) + AUTHOR_COLORS.length) % AUTHOR_COLORS.length;
+}
+
+// Authors on one screen take the next free color when theirs is taken, like the widget does.
+function authorSlots(authors) {
+  const taken = new Array(AUTHOR_COLORS.length).fill(false);
+  const slots = new Map();
+  for (const a of authors) {
+    if (slots.has(a)) continue;
+    let slot = authorSlot(a);
+    if (taken.every(Boolean)) taken.fill(false);
+    while (taken[slot]) slot = (slot + 1) % AUTHOR_COLORS.length;
+    taken[slot] = true;
+    slots.set(a, slot);
+  }
+  return slots;
+}
+
+// ColorUtils.blendARGB, truncating each channel like Android does.
+function blend(a, b, r) {
+  const ch = (c, i) => parseInt(c.slice(1 + i * 2, 3 + i * 2), 16);
+  return '#' + [0, 1, 2].map(i => Math.trunc(ch(a, i) * (1 - r) + ch(b, i) * r).toString(16).padStart(2, '0')).join('');
+}
+
+// Custom properties for one author color; style.css picks the light or dark pair.
+function tintVars(slot) {
+  const [light, dark] = AUTHOR_COLORS[slot];
+  return `--al:${light};--ad:${dark};--wl:${blend('#ffffff', light, .16)};--wd:${blend('#1c1b1f', dark, .2)}`;
+}
+
 // ---------- GitHub API ----------
 async function gh(path, { fresh = false } = {}) {
   if (!fresh && cache.has(path)) return cache.get(path);
@@ -143,7 +195,7 @@ history.scrollRestoration = 'manual';
 let here = 0;
 
 function parentOf(hash) {
-  const p = hash.replace(/^#\/?/, '').split('/');
+  const p = hash.replace(/^#\/?/, '').split('?')[0].split('/');
   if (p[0] === 'c' && p[3]) return `#/r/${p[1]}/${p[2]}`;
   if (p[0] === 'r' || p[0] === 'settings') return '#/';
   return null;
@@ -209,14 +261,17 @@ let navToken = 0;
 async function route({ keepScroll = false, restoreY = null } = {}) {
   const my = ++navToken;
   const stale = () => my !== navToken;
-  const parts = location.hash.replace(/^#\/?/, '').split('/').map(decodeURIComponent);
+  // An optional ?query can follow the path, e.g. #/c/owner/repo/sha?tint=3 from the widget.
+  const [path, query = ''] = location.hash.split(/\?(.*)/s);
+  const parts = path.replace(/^#\/?/, '').split('/').map(decodeURIComponent);
+  const params = new URLSearchParams(query);
   if (!keepScroll) scrollTo(0, 0);
 
   if (!token) return setupView();
   try {
     if (parts[0] === 'settings') await settingsView(stale);
     else if (parts[0] === 'r' && parts[2]) await repoView(parts[1], parts[2], parts[3], stale);
-    else if (parts[0] === 'c' && parts[3]) await commitView(parts[1], parts[2], parts[3], stale);
+    else if (parts[0] === 'c' && parts[3]) await commitView(parts[1], parts[2], parts[3], stale, params.get('tint'));
     else await homeView(stale);
     if (restoreY && !stale()) scrollTo(0, restoreY);
   } catch (e) {
@@ -295,7 +350,7 @@ addEventListener('touchcancel', () => { pullStart = null; if (!refreshing) pullR
 
 // ---------- ripple ----------
 // Waits a beat on touch so a scroll that starts on a row doesn't flash it.
-const RIPPLE = '.row, .chip, .icon-btn, .text-btn, .pill, .more, .primary, .pin, .branch, .file summary';
+const RIPPLE = '.row, .chip, .icon-btn, .text-btn, .pill, .more, .primary, .pin, .branch, .file summary, .toggle-all';
 document.addEventListener('pointerdown', e => {
   const el = e.target.closest(RIPPLE);
   if (!el || el.disabled || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
@@ -544,6 +599,7 @@ async function repoView(owner, name, branch, stale) {
     const data = await gh(`/repos/${enc(owner)}/${enc(name)}/commits?sha=${enc(branch)}&per_page=${PAGE}&page=${page}`);
     if (stale()) return;
     all = all.concat(data);
+    const slots = authorSlots(all.map(authorOf));
     const groups = [];
     for (const c of all) {
       const label = dayLabel(c.commit.author?.date || c.commit.committer?.date);
@@ -551,7 +607,7 @@ async function repoView(owner, name, branch, stale) {
       groups.at(-1).items.push(c);
     }
     box.innerHTML = all.length
-      ? groups.map(g => `<div class="section-label">${esc(g.label)}</div><div class="list timeline">${g.items.map(c => commitRow(c, full, c === all[0])).join('')}</div>`).join('') +
+      ? groups.map(g => `<div class="section-label">${esc(g.label)}</div><div class="list timeline">${g.items.map(c => commitRow(c, full, c === all[0], slots.get(authorOf(c)))).join('')}</div>`).join('') +
         (data.length === PAGE ? '<button class="more">Load older commits</button>' : '')
       : '<div class="empty">No commits on this branch</div>';
     const more = box.querySelector('.more');
@@ -564,92 +620,144 @@ async function repoView(owner, name, branch, stale) {
   await loadPage();
 }
 
-function commitRow(c, full, head = false) {
+// The name the widget colors by: the GitHub login, or the git author name without one.
+const authorOf = c => c.author?.login || c.commit.author?.name || 'unknown';
+
+function commitRow(c, full, head = false, slot = authorSlot(authorOf(c))) {
   const [title] = c.commit.message.split('\n');
-  const who = c.author?.login || c.commit.author?.name || 'unknown';
+  const who = authorOf(c);
   return `
-    <a class="row${head ? ' head' : ''}" href="#/c/${full.split('/').map(enc).join('/')}/${enc(c.sha)}">
+    <a class="row${head ? ' head' : ''}" href="#/c/${full.split('/').map(enc).join('/')}/${enc(c.sha)}?tint=${slot}" style="${tintVars(slot)}">
       ${avatar(c.author?.avatar_url, who)}
       <div class="row-main">
         <div class="commit-msg">${esc(title)}</div>
-        <div class="meta"><span>${esc(who)}</span><span>${ago(c.commit.author?.date)}</span><span class="sha">${esc(c.sha.slice(0, 7))}</span></div>
+        <div class="meta"><span class="who">${esc(who)}</span><span>${ago(c.commit.author?.date)}</span><span class="sha">${esc(c.sha.slice(0, 7))}</span></div>
       </div>
     </a>`;
 }
 
-async function commitView(owner, name, sha, stale) {
-  setBar({ title: sha.slice(0, 7), subtitle: `${owner}/${name}`, back: `#/r/${enc(owner)}/${enc(name)}` });
-  view.innerHTML = `<div class="card">${skeleton(2)}</div>`;
+async function commitView(owner, name, sha, stale, tint) {
+  setBar({ title: name, subtitle: owner, back: `#/r/${enc(owner)}/${enc(name)}` });
+  view.innerHTML = '<div class="commit skel-commit"></div>';
   const c = await gh(`/repos/${enc(owner)}/${enc(name)}/commits/${enc(sha)}`);
   if (stale()) return;
 
   const [title, ...rest] = c.commit.message.split('\n');
   const body = unwrap(rest.join('\n').trim());
-  const who = c.author?.login || c.commit.author?.name;
-  const date = new Date(c.commit.author?.date);
+  const who = authorOf(c);
+  const fullName = c.commit.author?.name || who;
+  const date = new Date(c.commit.author?.date || c.commit.committer?.date);
+  // The widget passes the color it showed; it may have moved off the hashed one to avoid a clash.
+  const slot = /^\d$/.test(tint ?? '') ? +tint : authorSlot(who);
   const files = c.files || [];
   const { additions = 0, deletions = 0 } = c.stats || {};
   const total = additions + deletions || 1;
   const greens = Math.round((additions / total) * 5);
   const reds = additions + deletions ? Math.min(5 - greens, Math.round((deletions / total) * 5)) : 0;
   const bars = Array.from({ length: 5 }, (_, i) => `<i class="${i < greens ? 'a' : i < greens + reds ? 'd' : ''}"></i>`).join('');
+  // Small commits open with every diff showing; bigger ones start as a list of files.
+  const openAll = files.length <= 3 && additions + deletions < 300;
+  const withPatch = files.filter(f => f.patch).length;
 
+  ui.subtitle.textContent = `${who} · ${ago(date)}`;
   view.innerHTML = `
-    <div class="card fade">
-      <h1 class="detail-title">${esc(title)}</h1>
-      ${body ? `<p class="detail-body">${esc(body)}</p>` : ''}
+    <article class="commit fade" style="${tintVars(slot)}">
       <div class="author">
         ${avatar(c.author?.avatar_url, who)}
-        <div><b>${esc(c.commit.author?.name || who)}</b>
-          <small>${date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })} (${ago(date)})</small></div>
+        <div class="author-text">
+          <b>${esc(fullName)}</b>
+          <small>${date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</small>
+        </div>
       </div>
+      <h1 class="detail-title">${esc(title)}</h1>
+      ${body ? `<div class="detail-body">${body.split(/\n{2,}/).map(bodyBlock).join('')}</div>` : ''}
       <div class="actions">
-        <button class="pill mono" id="copy">
-          <svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>${esc(c.sha.slice(0, 10))}
+        <button class="pill mono" id="copy" aria-label="Copy commit SHA">
+          <svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>${esc(c.sha.slice(0, 7))}
         </button>
         <a class="pill" href="${esc(c.html_url)}" target="_blank" rel="noopener">
           <svg viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>GitHub
         </a>
       </div>
-    </div>
-    <div class="section-label stats">
+    </article>
+    <div class="stats">
       <span>${files.length} file${files.length === 1 ? '' : 's'}</span>
       <span class="add">+${additions}</span><span class="del">−${deletions}</span>
-      <span class="bars">${bars}</span>
+      <span class="bars" aria-hidden="true">${bars}</span>
+      ${withPatch > 1 ? `<button class="toggle-all" id="toggleAll"></button>` : ''}
     </div>
-    <div class="list fade">${files.map(fileRow).join('') || '<div class="empty">No file changes</div>'}</div>
+    <div class="files fade">${files.map(f => fileRow(f, openAll)).join('') || '<div class="empty">No file changes</div>'}</div>
     ${files.length >= 300 ? '<p class="row-desc" style="text-align:center;margin-top:12px">GitHub shows at most 300 files. Open on GitHub for the full diff.</p>' : ''}`;
 
   document.getElementById('copy').onclick = async () => {
     try { await navigator.clipboard.writeText(c.sha); toast('Commit SHA copied'); }
     catch { toast(c.sha); }
   };
+
+  // Reads "Expand all" until every diff is open, then "Collapse all".
+  const toggleAll = document.getElementById('toggleAll');
+  if (toggleAll) {
+    const details = [...view.querySelectorAll('details.file')].filter(d => d.querySelector('.patch'));
+    const sync = () => (toggleAll.textContent = details.every(d => d.open) ? 'Collapse all' : 'Expand all');
+    details.forEach(d => d.addEventListener('toggle', sync));
+    toggleAll.onclick = () => {
+      const open = !details.every(d => d.open);
+      details.forEach(d => (d.open = open));
+      sync();
+    };
+    sync();
+  }
 }
 
 // Commit bodies are usually hard-wrapped at ~72 columns. Rejoin plain prose paragraphs so they
 // reflow on a phone, but leave paragraphs with lists, quotes or indented code untouched.
 function unwrap(text) {
   return text.split(/\n{2,}/).map(p =>
-    /^([ \t]|[-*+>]|\d+[.)])/m.test(p) ? p : p.replace(/[ \t]*\n[ \t]*/g, ' ')
+    // A list: fold each item's indented continuation lines back into the item.
+    /^[-*+]\s/.test(p) ? p.replace(/\n[ \t]+(?![-*+]\s|\d+[.)]\s)/g, ' ')
+    : /^([ \t]|[-*+>]|\d+[.)])/m.test(p) ? p : p.replace(/[ \t]*\n[ \t]*/g, ' ')
   ).join('\n\n');
 }
 
-function fileRow(f) {
+// One body paragraph. A plain bullet list becomes a real list, so wrapped items hang under their text.
+function bodyBlock(p) {
+  const lines = p.split('\n');
+  if (lines.every(l => /^[-*+]\s/.test(l))) return `<ul>${lines.map(l => `<li>${esc(l.slice(2).trim())}</li>`).join('')}</ul>`;
+  return `<p>${esc(p)}</p>`;
+}
+
+// One diff line. The +/− marker sits in its own gutter; a long line wraps, and its continuation
+// hangs two columns past the line's own indentation so nesting stays readable.
+function patchLine(l) {
+  if (l.startsWith('@@')) {
+    const [, range = l, where = ''] = l.match(/^(@@.*?@@)\s*(.*)$/) || [];
+    return `<div class="ph"><span>${esc(range)}</span>${where ? ` <span class="where">${esc(where)}</span>` : ''}</div>`;
+  }
+  if (l.startsWith('\\')) return `<div class="pn">${esc(l.slice(1).trim())}</div>`;
+  const kind = l[0] === '+' ? 'pa' : l[0] === '-' ? 'pd' : '';
+  const code = l.slice(1);
+  const lead = code.match(/^[ \t]*/)[0];
+  // Prefer breaking a long line after . ( or , over splitting an identifier.
+  const indent = Math.min(24, lead.length + (lead.split('\t').length - 1) * 3); // tabs are 4 wide
+  return `<div class="pl ${kind}" style="--i:${indent}ch"><i aria-hidden="true">${kind === 'pa' ? '+' : kind === 'pd' ? '−' : ''}</i><code>${esc(code).replace(/([.(,])(?=\S)/g, '$1<wbr>') || ' '}</code></div>`;
+}
+
+function fileRow(f, open = false) {
   const letter = { added: 'A', removed: 'D', modified: 'M', renamed: 'R', copied: 'C', changed: 'M' }[f.status] || 'M';
+  const label = { added: 'Added', removed: 'Deleted', renamed: 'Renamed', copied: 'Copied' }[f.status] || 'Modified';
   const slash = f.filename.lastIndexOf('/');
   const dir = slash >= 0 ? f.filename.slice(0, slash) : '';
   const base = f.filename.slice(slash + 1);
   const patch = f.patch
-    ? `<pre class="patch">${f.patch.split('\n').map(l =>
-        `<div class="${l.startsWith('@@') ? 'ph' : l[0] === '+' ? 'pa' : l[0] === '-' ? 'pd' : ''}">${esc(l) || ' '}</div>`).join('')}</pre>`
+    ? `<div class="patch">${f.patch.split('\n').map(patchLine).join('')}</div>`
     : `<div class="patch-empty">${f.status === 'renamed' && !f.changes ? `Renamed from ${esc(f.previous_filename)}` : 'Binary file or diff too large to show'}</div>`;
   return `
-    <details class="file">
+    <details class="file ${esc(f.status)}"${open && f.patch ? ' open' : ''}>
       <summary>
-        <span class="status ${esc(f.status)}">${letter}</span>
+        <span class="status ${esc(f.status)}" title="${label}">${letter}</span>
         <span class="fname">${esc(base)}${dir ? `<em>${esc(dir).replace(/\//g, '/<wbr>')}</em>` : ''}</span>
-        <span class="add">+${f.additions}</span><span class="del">−${f.deletions}</span>
-        <svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+        <span class="counts">${f.additions ? `<span class="add">+${f.additions}</span>` : ''}${f.deletions ? `<span class="del">−${f.deletions}</span>` : ''}</span>
+        <span class="chev" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></span>
       </summary>
       ${patch}
     </details>`;
