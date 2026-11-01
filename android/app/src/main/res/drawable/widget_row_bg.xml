@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Rows are flat; only a soft rounded ripple on press. -->
+<!-- Each commit is a soft card on the tinted widget background. -->
 <ripple xmlns:android="http://schemas.android.com/apk/res/android" android:color="#26888888">
-    <item android:id="@android:id/mask">
+    <item>
         <shape>
-            <solid android:color="#ffffff" />
+            <solid android:color="@color/widget_row_bg" />
             <corners android:radius="@android:dimen/system_app_widget_inner_radius" />
         </shape>
     </item>

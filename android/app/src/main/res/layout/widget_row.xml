@@ -5,8 +5,8 @@
     android:layout_height="wrap_content"
     android:background="@drawable/widget_row_bg"
     android:orientation="horizontal"
-    android:paddingHorizontal="10dp"
-    android:paddingVertical="11dp">
+    android:paddingHorizontal="14dp"
+    android:paddingVertical="12dp">
 
     <ImageView
         android:id="@+id/dot"
