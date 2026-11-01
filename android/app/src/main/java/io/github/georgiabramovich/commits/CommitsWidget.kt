@@ -96,6 +96,13 @@ class CommitsWidget : AppWidgetProvider() {
 
             val state = WidgetData.state(ctx)
             val updated = WidgetData.updatedAt(ctx)
+            // With a single pinned repo its name goes in the title instead of on every row.
+            val pins = WidgetData.pins(ctx)
+            val singleRepo = pins.size == 1
+            views.setTextViewText(
+                R.id.title,
+                if (singleRepo && state == WidgetData.State.OK) pins[0].substringAfter('/') else ctx.getString(R.string.widget_title),
+            )
             views.setTextViewText(
                 R.id.subtitle,
                 when {
@@ -122,8 +129,13 @@ class CommitsWidget : AppWidgetProvider() {
             val items = RemoteViews.RemoteCollectionItems.Builder().setViewTypeCount(1)
             commits.forEachIndexed { i, c ->
                 val row = RemoteViews(ctx.packageName, R.layout.widget_row)
+                val (light, dark) = authorColor(c.author)
+                row.setColorInt(R.id.dot, "setColorFilter", light, dark)
+                row.setColorInt(R.id.author, "setTextColor", light, dark)
+                row.setTextViewText(R.id.author, c.author)
+                row.setTextViewText(R.id.time, " · ${ago(ctx, c.date.toEpochMilli(), now)}")
                 row.setTextViewText(R.id.repo, c.repo.substringAfter('/'))
-                row.setTextViewText(R.id.meta, "${c.author} · ${ago(ctx, c.date.toEpochMilli(), now)}")
+                row.setViewVisibility(R.id.repo, if (singleRepo) View.GONE else View.VISIBLE)
                 row.setTextViewText(R.id.message, c.title)
                 row.setOnClickFillInIntent(
                     R.id.row,
@@ -146,6 +158,23 @@ class CommitsWidget : AppWidgetProvider() {
                 if (mutable) PendingIntent.FLAG_MUTABLE else PendingIntent.FLAG_IMMUTABLE
             return PendingIntent.getActivity(ctx, requestCode, intent, flags)
         }
+
+        // Each author keeps one color: a deeper shade for light mode and a softer one for dark mode.
+        private val AUTHOR_COLORS = listOf(
+            0xFF00796B to 0xFF4DB6AC, // teal
+            0xFFE65100 to 0xFFFFB74D, // orange
+            0xFFC2185B to 0xFFF48FB1, // pink
+            0xFF1565C0 to 0xFF64B5F6, // blue
+            0xFF6A1B9A to 0xFFCE93D8, // purple
+            0xFF2E7D32 to 0xFF81C784, // green
+            0xFF8D6E00 to 0xFFFFD54F, // amber
+            0xFF3949AB to 0xFF9FA8DA, // indigo
+            0xFFC62828 to 0xFFEF9A9A, // red
+            0xFF00838F to 0xFF4DD0E1, // cyan
+        ).map { (l, d) -> l.toInt() to d.toInt() }
+
+        private fun authorColor(author: String) =
+            AUTHOR_COLORS[Math.floorMod(author.lowercase().hashCode(), AUTHOR_COLORS.size)]
 
         /** "14 min. ago" today, "Yesterday", then the date ("Oct 28"; with the year if it isn't this year). */
         private fun ago(ctx: Context, then: Long, now: Long): String {

@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ripple xmlns:android="http://schemas.android.com/apk/res/android" android:color="?android:attr/colorControlHighlight">
-    <item>
+<!-- Rows are flat; only a soft rounded ripple on press. -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android" android:color="#26888888">
+    <item android:id="@android:id/mask">
         <shape>
-            <solid android:color="@color/widget_row_bg" />
+            <solid android:color="#ffffff" />
             <corners android:radius="@android:dimen/system_app_widget_inner_radius" />
         </shape>
     </item>
