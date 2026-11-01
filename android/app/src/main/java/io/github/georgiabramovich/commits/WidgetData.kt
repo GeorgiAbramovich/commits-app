@@ -20,8 +20,8 @@ data class WidgetCommit(
 /** What the widget shows, stored in private SharedPreferences (never backed up). */
 object WidgetData {
     private const val PREFS = "commits"
-    private const val PER_REPO = 30
-    private const val MAX_ITEMS = 30
+    private const val PER_REPO = 100 // GitHub's max page size
+    private const val MAX_ITEMS = 100
     private const val MAX_REPOS = 15
 
     enum class State { SIGNED_OUT, NO_PINS, OK }

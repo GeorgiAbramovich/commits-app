@@ -19,6 +19,9 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.Worker
 import androidx.work.WorkerParameters
+import java.time.Instant
+import java.time.ZoneId
+import java.time.temporal.ChronoUnit
 import java.util.concurrent.TimeUnit
 
 /** Home screen widget: the newest commits across the repos pinned in the app. */
@@ -99,7 +102,7 @@ class CommitsWidget : AppWidgetProvider() {
                     refreshing -> ctx.getString(R.string.widget_refreshing)
                     state != WidgetData.State.OK -> ctx.getString(R.string.widget_title_hint)
                     WidgetData.error(ctx) != null -> WidgetData.error(ctx)
-                    updated != null -> ctx.getString(R.string.widget_updated, ago(updated.toEpochMilli(), now))
+                    updated != null -> ctx.getString(R.string.widget_updated, ago(ctx, updated.toEpochMilli(), now))
                     else -> ctx.getString(R.string.widget_loading)
                 },
             )
@@ -120,7 +123,7 @@ class CommitsWidget : AppWidgetProvider() {
             commits.forEachIndexed { i, c ->
                 val row = RemoteViews(ctx.packageName, R.layout.widget_row)
                 row.setTextViewText(R.id.repo, c.repo.substringAfter('/'))
-                row.setTextViewText(R.id.meta, "${c.author} · ${ago(c.date.toEpochMilli(), now)}")
+                row.setTextViewText(R.id.meta, "${c.author} · ${ago(ctx, c.date.toEpochMilli(), now)}")
                 row.setTextViewText(R.id.message, c.title)
                 row.setOnClickFillInIntent(
                     R.id.row,
@@ -144,8 +147,22 @@ class CommitsWidget : AppWidgetProvider() {
             return PendingIntent.getActivity(ctx, requestCode, intent, flags)
         }
 
-        private fun ago(then: Long, now: Long): String =
-            if (now - then < DateUtils.MINUTE_IN_MILLIS) "now"
-            else DateUtils.getRelativeTimeSpanString(then, now, DateUtils.MINUTE_IN_MILLIS, DateUtils.FORMAT_ABBREV_ALL).toString()
+        /** "14 min. ago" today, "Yesterday", then the date ("Oct 28"; with the year if it isn't this year). */
+        private fun ago(ctx: Context, then: Long, now: Long): String {
+            val zone = ZoneId.systemDefault()
+            val thenDay = Instant.ofEpochMilli(then).atZone(zone).toLocalDate()
+            val nowDay = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
+            val days = ChronoUnit.DAYS.between(thenDay, nowDay)
+            return when {
+                now - then < DateUtils.MINUTE_IN_MILLIS -> "now"
+                days <= 0 -> DateUtils.getRelativeTimeSpanString(then, now, DateUtils.MINUTE_IN_MILLIS, DateUtils.FORMAT_ABBREV_ALL).toString()
+                days == 1L -> ctx.getString(R.string.yesterday)
+                else -> DateUtils.formatDateTime(
+                    ctx, then,
+                    DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_ABBREV_MONTH or
+                        if (thenDay.year == nowDay.year) DateUtils.FORMAT_NO_YEAR else DateUtils.FORMAT_SHOW_YEAR,
+                )
+            }
+        }
     }
 }

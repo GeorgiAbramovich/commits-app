@@ -11,4 +11,5 @@
     <string name="widget_no_pins">Tap to open Commits, then star a repo to pin it here</string>
     <string name="widget_no_commits">No commits in your pinned repos yet</string>
     <string name="refresh">Refresh</string>
+    <string name="yesterday">Yesterday</string>
 </resources>
