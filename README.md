@@ -76,17 +76,6 @@ on the [tokens page](https://github.com/settings/tokens), choose **Configure SSO
 - No analytics, no cookies, no server. The service worker caches only the app's own files, never API responses.
 - **Settings → Sign out** deletes the token from the device. You can also revoke it on GitHub at any time.
 
-## Self-host or fork
-
-The app is plain static files, so any static host works. With GitHub Pages:
-
-1. Fork this repo (or push a copy to your account).
-2. In your repo, open **Settings → Pages** and set **Source** to **GitHub Actions**.
-3. Push to `main`. The workflow in [`.github/workflows/pages.yml`](.github/workflows/pages.yml) publishes the repo root.
-4. Your app is at `https://<you>.github.io/<repo>/`.
-
-Pages on a private repo needs a paid GitHub plan. The repo only contains app code, never your token.
-
 ## Local development
 
 There is nothing to install. Serve the folder and open it:
