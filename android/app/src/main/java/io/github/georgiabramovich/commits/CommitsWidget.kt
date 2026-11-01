@@ -42,7 +42,8 @@ class CommitsWidget : AppWidgetProvider() {
 
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
-        if (intent.action == ACTION_REFRESH) {
+        // Also refresh right after an app update, so new widget code shows without waiting.
+        if (intent.action == ACTION_REFRESH || intent.action == Intent.ACTION_MY_PACKAGE_REPLACED) {
             render(context, refreshing = true)
             refreshNow(context)
         }
