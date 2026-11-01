@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Each commit sits on a tonal (secondary container) surface, a step darker than the widget in light mode and a step lighter in dark mode. -->
+<!-- Each commit card. CommitsWidget tints it with a wash of the author's color; this color is the untinted fallback. -->
 <ripple xmlns:android="http://schemas.android.com/apk/res/android" android:color="#26888888">
     <item>
         <shape>

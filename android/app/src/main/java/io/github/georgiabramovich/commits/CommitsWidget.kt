@@ -6,10 +6,12 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.net.Uri
 import android.text.format.DateUtils
 import android.view.View
 import android.widget.RemoteViews
+import androidx.core.graphics.ColorUtils
 import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
@@ -131,6 +133,11 @@ class CommitsWidget : AppWidgetProvider() {
             commits.forEachIndexed { i, c ->
                 val row = RemoteViews(ctx.packageName, R.layout.widget_row)
                 val (light, dark) = colors.getValue(c.author)
+                row.setColorStateList(
+                    R.id.row, "setBackgroundTintList",
+                    ColorStateList.valueOf(ColorUtils.blendARGB(CARD_LIGHT, light, 0.16f)),
+                    ColorStateList.valueOf(ColorUtils.blendARGB(CARD_DARK, dark, 0.20f)),
+                )
                 row.setColorInt(R.id.dot, "setColorFilter", light, dark)
                 row.setColorInt(R.id.author, "setTextColor", light, dark)
                 row.setTextViewText(R.id.author, c.author)
@@ -159,6 +166,10 @@ class CommitsWidget : AppWidgetProvider() {
                 if (mutable) PendingIntent.FLAG_MUTABLE else PendingIntent.FLAG_IMMUTABLE
             return PendingIntent.getActivity(ctx, requestCode, intent, flags)
         }
+
+        // Cards are a wash of the author's color over these bases, light and dark respectively.
+        private const val CARD_LIGHT = 0xFFFFFFFF.toInt()
+        private const val CARD_DARK = 0xFF1C1B1F.toInt()
 
         // Each author keeps one color: a deep shade for light mode and a soft one for dark mode.
         // All pairs measure >= 4.5:1 against the row surface (tone 90 light / tone 20 dark).
