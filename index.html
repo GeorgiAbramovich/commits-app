@@ -16,6 +16,15 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-180.png">
+<script>
+  // Apply the saved theme before first paint. 'system' (the default) follows the phone.
+  (function () {
+    var t = 'system';
+    try { t = JSON.parse(localStorage.getItem('theme')) || 'system'; } catch (e) {}
+    var dark = t === 'dark' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  })();
+</script>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>

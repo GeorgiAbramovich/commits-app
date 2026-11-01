@@ -190,7 +190,15 @@ addEventListener('scroll', () => {
     syncThemeColor();
   }
 }, { passive: true });
-matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', syncThemeColor);
+// Theme: 'system' follows the phone, 'light' and 'dark' override it.
+let theme = store.get('theme', 'system');
+const darkQuery = matchMedia('(prefers-color-scheme: dark)');
+function applyTheme() {
+  const dark = theme === 'dark' || (theme === 'system' && darkQuery.matches);
+  document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  syncThemeColor();
+}
+darkQuery.addEventListener?.('change', applyTheme);
 
 function showError(e, el = view) {
   el.innerHTML = `<div class="error fade">${esc(e.message || e)}</div>`;
@@ -469,6 +477,14 @@ async function settingsView(stale) {
     <div class="list fade">
       <div class="row"><div class="row-main">${pins.length ? pins.map(esc).join('<br>') : '<span class="row-desc">Tap the star on a repo to pin it to the top.</span>'}</div></div>
     </div>
+    <div class="section-label">Appearance</div>
+    <div class="list fade">
+      <div class="row theme-row">
+        <div class="row-main"><div class="row-title">Theme</div></div>
+        <div class="seg" role="radiogroup" aria-label="Theme">${[['system', 'System'], ['light', 'Light'], ['dark', 'Dark']].map(([t, label]) =>
+          `<button role="radio" data-t="${t}" aria-checked="${theme === t}">${label}</button>`).join('')}</div>
+      </div>
+    </div>
     ${native ? `
     <div class="section-label">Notifications</div>
     <div class="list fade">
@@ -481,6 +497,13 @@ async function settingsView(stale) {
     <div class="list fade" style="margin-top:24px">
       <button class="row danger" id="out">Sign out</button>
     </div>`;
+  view.querySelectorAll('.seg button').forEach(b => (b.onclick = () => {
+    theme = b.dataset.t;
+    store.set('theme', theme);
+    view.querySelectorAll('.seg button').forEach(x => x.setAttribute('aria-checked', x === b));
+    applyTheme();
+    native?.postMessage(JSON.stringify({ theme })); // status bar and window follow too
+  }));
   const notify = document.getElementById('notify');
   if (notify) notify.onclick = () => {
     notify.setAttribute('aria-checked', !notifyOn); // the app confirms (or reverts) once Android answers

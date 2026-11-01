@@ -30,33 +30,32 @@
   --ease: cubic-bezier(.2, 0, 0, 1);
   color-scheme: light;
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #131318;
-    --bar-scrolled: #1f1f27;
-    --surface: #1b1b22;
-    --surface-2: #26262f;
-    --surface-3: #31313b;
-    --text: #e5e1ec;
-    --muted: #a3a1b3;
-    --line: #2e2e38;
-    --accent: #c1c1ff;
-    --on-accent: #1d1b85;
-    --accent-soft: #3534a8;
-    --on-accent-soft: #e2e0ff;
-    --add: #5fd894;
-    --add-bg: #133423;
-    --del: #ff8a84;
-    --del-bg: #3d1a1a;
-    --star: #ffc94a;
-    --card: #211f27;
-    --well: #19181e;
-    --chip: rgba(255, 255, 255, .09);
-    --add-line: #1a2e24;
-    --del-line: #321e21;
-    --muted-wash: #b8b5c8;
-    color-scheme: dark;
-  }
+/* Dark theme. index.html sets data-theme before first paint (System follows the phone). */
+:root[data-theme="dark"] {
+  --bg: #131318;
+  --bar-scrolled: #1f1f27;
+  --surface: #1b1b22;
+  --surface-2: #26262f;
+  --surface-3: #31313b;
+  --text: #e5e1ec;
+  --muted: #a3a1b3;
+  --line: #2e2e38;
+  --accent: #c1c1ff;
+  --on-accent: #1d1b85;
+  --accent-soft: #3534a8;
+  --on-accent-soft: #e2e0ff;
+  --add: #5fd894;
+  --add-bg: #133423;
+  --del: #ff8a84;
+  --del-bg: #3d1a1a;
+  --star: #ffc94a;
+  --card: #211f27;
+  --well: #19181e;
+  --chip: rgba(255, 255, 255, .09);
+  --add-line: #1a2e24;
+  --del-line: #321e21;
+  --muted-wash: #b8b5c8;
+  color-scheme: dark;
 }
 
 [hidden] { display: none !important; }
@@ -216,9 +215,7 @@ main {
    washes over white and #1C1B1F, as in the widget) inline; these pick the pair for the scheme. */
 .commit, .timeline .row { --a: var(--al, var(--accent)); --wash: var(--wl, var(--surface-2)); }
 .timeline .row .who { color: var(--a); }
-@media (prefers-color-scheme: dark) {
-  .commit, .timeline .row { --a: var(--ad, var(--accent)); --wash: var(--wd, var(--surface-2)); }
-}
+[data-theme="dark"] .commit, [data-theme="dark"] .timeline .row { --a: var(--ad, var(--accent)); --wash: var(--wd, var(--surface-2)); }
 
 /* Commit detail: tonal cards on the page tone, no outlines, like the widget. */
 .card { background: var(--surface); border-radius: var(--radius); border: 1px solid var(--line); padding: 20px; }
@@ -352,3 +349,9 @@ main {
   .ripple { display: none; }
   .toast, .ptr.settle, .bar, .file .chev svg { transition: none; }
 }
+
+/* Theme picker: a small segmented control. */
+.theme-row { align-items: center; }
+.seg { display: flex; gap: 4px; padding: 4px; border-radius: 999px; background: var(--surface-2); flex: none; }
+.seg button { min-height: 40px; padding: 0 14px; border-radius: 999px; font-size: 14px; font-weight: 500; color: var(--muted); }
+.seg button[aria-checked="true"] { background: var(--accent); color: var(--on-accent); }

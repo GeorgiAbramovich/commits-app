@@ -1,6 +1,7 @@
 package io.github.georgiabramovich.commits
 
 import android.Manifest
+import android.app.UiModeManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -76,6 +77,17 @@ class MainActivity : ComponentActivity() {
                 val data = JSONObject(message.data ?: return@addWebMessageListener)
                 data.optJSONObject("share")?.let {
                     share(it.optString("title"), it.optString("url"))
+                    return@addWebMessageListener
+                }
+                if (data.has("theme")) {
+                    // Per-app night mode, so the status bar and window match the page's theme.
+                    getSystemService(UiModeManager::class.java).setApplicationNightMode(
+                        when (data.getString("theme")) {
+                            "light" -> UiModeManager.MODE_NIGHT_NO
+                            "dark" -> UiModeManager.MODE_NIGHT_YES
+                            else -> UiModeManager.MODE_NIGHT_AUTO
+                        },
+                    )
                     return@addWebMessageListener
                 }
                 if (data.has("notify")) {
