@@ -316,6 +316,7 @@ main {
 .steps b { color: var(--text); font-weight: 500; }
 .danger { color: var(--del); font-weight: 500; align-items: center; }
 .switch-row { align-items: center; text-align: left; width: 100%; }
+.switch-row .row-desc { display: block; -webkit-line-clamp: unset; }
 .switch { flex: none; position: relative; width: 52px; height: 32px; border-radius: 16px; border: 2px solid var(--muted); background: var(--surface-2); transition: background .2s var(--ease), border-color .2s var(--ease); }
 .switch::after { content: ""; position: absolute; top: 6px; left: 6px; width: 16px; height: 16px; border-radius: 50%; background: var(--muted); transition: all .2s var(--ease); }
 [aria-checked="true"] > .switch { background: var(--accent); border-color: var(--accent); }

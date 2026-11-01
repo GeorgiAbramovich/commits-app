@@ -12,8 +12,8 @@ android {
         applicationId = "io.github.georgiabramovich.commits"
         minSdk = 31
         targetSdk = 36
-        versionCode = 13
-        versionName = "1.12"
+        versionCode = 14
+        versionName = "1.13"
     }
 
     buildTypes {
