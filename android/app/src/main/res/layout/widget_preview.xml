@@ -45,7 +45,7 @@
                 android:textSize="16sp" />
 
             <TextView
-                android:text="Updated just now"
+                android:text="1 new · Updated just now"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:ellipsize="end"
@@ -117,6 +117,18 @@
                 android:maxLines="1"
                 android:textColor="@color/widget_text_muted"
                 android:textSize="12sp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/widget_new_bg"
+                android:fontFamily="sans-serif-medium"
+                android:maxLines="1"
+                android:paddingHorizontal="6dp"
+                android:text="@string/widget_new"
+                android:textColor="@color/widget_on_accent"
+                android:textSize="11sp" />
 
             <TextView
                 android:text=""

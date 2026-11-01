@@ -494,6 +494,7 @@ async function settingsView(stale) {
 }
 
 async function homeView(stale) {
+  visit = null; // going home ends a repo visit; the next one marks only what's newer than now
   setBar({ title: 'Commits', refresh: true, settings: true, install: true });
   view.innerHTML = `<div class="chips"></div>${skeleton(6)}`;
 
@@ -589,6 +590,12 @@ function repoRow(r) {
     </div>`;
 }
 
+// "New since you last looked": per repo and branch, the newest commit date seen. The threshold read on
+// arrival holds for the whole visit (refreshing, opening a commit and coming back), so markers don't
+// vanish under your thumb. A branch you've never opened has no threshold, so nothing is marked new.
+let visit = null; // { key, since }
+const landed = c => c.commit.committer?.date || c.commit.author?.date;
+
 async function repoView(owner, name, branch, stale) {
   const full = `${owner}/${name}`;
   setBar({ title: name, subtitle: owner, back: '#/', refresh: true });
@@ -614,6 +621,10 @@ async function repoView(owner, name, branch, stale) {
   view.querySelector('select').onchange = e =>
     replaceNav(`#/r/${enc(owner)}/${enc(name)}/${enc(e.target.value)}`);
 
+  const key = `seen:${full}@${branch}`;
+  if (visit?.key !== key) visit = { key, since: store.get(key, null) };
+  const since = visit.since ? Date.parse(visit.since) : Infinity;
+
   const box = view.querySelector('#commits');
   box.innerHTML = skeleton(8);
   let page = 1;
@@ -623,6 +634,8 @@ async function repoView(owner, name, branch, stale) {
     const data = await gh(`/repos/${enc(owner)}/${enc(name)}/commits?sha=${enc(branch)}&per_page=${PAGE}&page=${page}`);
     if (stale()) return;
     all = all.concat(data);
+    const dates = [store.get(key, null), ...data.map(landed)].filter(Boolean);
+    if (dates.length) store.set(key, dates.reduce((a, b) => (Date.parse(b) > Date.parse(a) ? b : a)));
     const slots = authorSlots(all.map(authorOf));
     const groups = [];
     for (const c of all) {
@@ -631,7 +644,7 @@ async function repoView(owner, name, branch, stale) {
       groups.at(-1).items.push(c);
     }
     box.innerHTML = all.length
-      ? groups.map(g => `<div class="section-label">${esc(g.label)}</div><div class="list timeline">${g.items.map(c => commitRow(c, full, c === all[0], slots.get(authorOf(c)))).join('')}</div>`).join('') +
+      ? groups.map(g => `<div class="section-label">${esc(g.label)}</div><div class="list timeline">${g.items.map(c => commitRow(c, full, c === all[0], slots.get(authorOf(c)), Date.parse(landed(c)) > since)).join('')}</div>`).join('') +
         (data.length === PAGE ? '<button class="more">Load older commits</button>' : '')
       : '<div class="empty">No commits on this branch</div>';
     const more = box.querySelector('.more');
@@ -647,7 +660,7 @@ async function repoView(owner, name, branch, stale) {
 // The name the widget colors by: the GitHub login, or the git author name without one.
 const authorOf = c => c.author?.login || c.commit.author?.name || 'unknown';
 
-function commitRow(c, full, head = false, slot = authorSlot(authorOf(c))) {
+function commitRow(c, full, head = false, slot = authorSlot(authorOf(c)), fresh = false) {
   const [title] = c.commit.message.split('\n');
   const who = authorOf(c);
   return `
@@ -655,7 +668,7 @@ function commitRow(c, full, head = false, slot = authorSlot(authorOf(c))) {
       ${avatar(c.author?.avatar_url, who)}
       <div class="row-main">
         <div class="commit-msg">${esc(title)}</div>
-        <div class="meta"><span class="who">${esc(who)}</span><span>${ago(c.commit.author?.date)}</span><span class="sha">${esc(c.sha.slice(0, 7))}</span></div>
+        <div class="meta">${fresh ? '<span class="new">New</span>' : ''}<span class="who">${esc(who)}</span><span>${ago(c.commit.author?.date)}</span><span class="sha">${esc(c.sha.slice(0, 7))}</span></div>
       </div>
     </a>`;
 }
@@ -693,8 +706,8 @@ async function commitView(owner, name, sha, stale, tint) {
           <small>${date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</small>
         </div>
       </div>
-      <h1 class="detail-title">${esc(title)}</h1>
-      ${body ? `<div class="detail-body">${body.split(/\n{2,}/).map(bodyBlock).join('')}</div>` : ''}
+      <h1 class="detail-title">${refs(esc(title), owner, name)}</h1>
+      ${body ? `<div class="detail-body">${refs(body.split(/\n{2,}/).map(bodyBlock).join(''), owner, name)}</div>` : ''}
       <div class="actions">
         <button class="pill mono" id="copy" aria-label="Copy commit SHA">
           <svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>${esc(c.sha.slice(0, 7))}
@@ -702,6 +715,9 @@ async function commitView(owner, name, sha, stale, tint) {
         <a class="pill" href="${esc(c.html_url)}" target="_blank" rel="noopener">
           <svg viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>GitHub
         </a>
+        <button class="pill" id="share">
+          <svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="M8.2 10.8l7.6-4.4M8.2 13.2l7.6 4.4"/></svg>Share
+        </button>
       </div>
     </article>
     <div class="stats">
@@ -716,6 +732,19 @@ async function commitView(owner, name, sha, stale, tint) {
   document.getElementById('copy').onclick = async () => {
     try { await navigator.clipboard.writeText(c.sha); toast('Commit SHA copied'); }
     catch { toast(c.sha); }
+  };
+
+  // Shares the commit's GitHub page: through Android's share sheet in the app, the system one on the
+  // web where there is one, otherwise by copying the link.
+  document.getElementById('share').onclick = async () => {
+    const share = { url: c.html_url, title };
+    if (native) return native.postMessage(JSON.stringify({ share }));
+    if (navigator.share) {
+      try { return await navigator.share(share); }
+      catch (e) { if (e.name === 'AbortError') return; }
+    }
+    try { await navigator.clipboard.writeText(share.url); toast('Link copied'); }
+    catch { toast(share.url); }
   };
 
   // Reads "Expand all" until every diff is open, then "Collapse all".
@@ -748,6 +777,13 @@ function bodyBlock(p) {
   const lines = p.split('\n');
   if (lines.every(l => /^[-*+]\s/.test(l))) return `<ul>${lines.map(l => `<li>${esc(l.slice(2).trim())}</li>`).join('')}</ul>`;
   return `<p>${esc(p)}</p>`;
+}
+
+// Links #123 in already-escaped text to that pull request (GitHub redirects it if it's an issue).
+// The # must not follow & or a word character, so entities like &#39; and other/repo#12 stay text.
+function refs(html, owner, name) {
+  return html.replace(/(?<![&\w])#(\d+)\b/g, (m, n) =>
+    `<a class="ref" href="https://github.com/${enc(owner)}/${enc(name)}/pull/${n}" target="_blank" rel="noopener">${m}</a>`);
 }
 
 // One diff line. The +/− marker sits in its own gutter; a long line wraps, and its continuation

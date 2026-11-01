@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The "New" chip on widget rows: filled with the wallpaper accent, so it never reads as an author color. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="@color/widget_accent" />
+    <corners android:radius="8dp" />
+</shape>

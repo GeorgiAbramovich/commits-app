@@ -68,12 +68,16 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // The page posts {token, pins} whenever they change, and {notify} from Settings; only our own
-        // origin can reach this. We answer with {notify} so the switch shows whether it's really on.
+        // The page posts {token, pins} whenever they change, {notify} from Settings and {share} from a
+        // commit; only our own origin can reach this. We answer {notify} so the switch shows whether it's really on.
         if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
             WebViewCompat.addWebMessageListener(web, "CommitsAndroid", setOf("https://$HOST")) { _, message, _, _, reply ->
                 page = reply
                 val data = JSONObject(message.data ?: return@addWebMessageListener)
+                data.optJSONObject("share")?.let {
+                    share(it.optString("title"), it.optString("url"))
+                    return@addWebMessageListener
+                }
                 if (data.has("notify")) {
                     when {
                         !data.getBoolean("notify") -> setNotify(false)
@@ -104,6 +108,22 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         val hash = intent.hashExtra()
         if (hash.isNotEmpty()) web.evaluateJavascript("location.hash = ${JSONObject.quote(hash)}", null)
+    }
+
+    // Opening the app counts as having looked: the widget's "new" count starts over from here.
+    override fun onResume() {
+        super.onResume()
+        if (WidgetData.markSeen(this)) CommitsWidget.render(this)
+    }
+
+    // A commit's GitHub link, through the system share sheet.
+    private fun share(title: String, url: String) {
+        if (!url.startsWith("https://")) return
+        val send = Intent(Intent.ACTION_SEND)
+            .setType("text/plain")
+            .putExtra(Intent.EXTRA_SUBJECT, title)
+            .putExtra(Intent.EXTRA_TEXT, if (title.isEmpty()) url else "$title\n$url")
+        startActivity(Intent.createChooser(send, null))
     }
 
     override fun onSaveInstanceState(outState: Bundle) {

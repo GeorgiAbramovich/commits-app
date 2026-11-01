@@ -133,6 +133,10 @@ object MergeWatcher {
         val open = Intent(ctx, MainActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             .putExtra(MainActivity.EXTRA_HASH, "#/c/${repo.split('/').joinToString("/") { Uri.encode(it) }}/${m.sha}")
+        // "Open PR" goes to the pull request on GitHub in the browser; the notification itself opens the merge commit.
+        val (owner, name) = repo.split("/", limit = 2)
+        val pr = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/${Uri.encode(owner)}/${Uri.encode(name)}/pull/${m.number}"))
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         val repoName = repo.substringAfter('/')
         val notification = NotificationCompat.Builder(ctx, CHANNEL)
             .setSmallIcon(R.drawable.ic_notification)
@@ -144,6 +148,10 @@ object MergeWatcher {
             .setAutoCancel(true)
             .setGroup(CHANNEL)
             .setContentIntent(PendingIntent.getActivity(ctx, id, open, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
+            .addAction(
+                0, ctx.getString(R.string.merges_open_pr),
+                PendingIntent.getActivity(ctx, "$repo#${m.number}/pr".hashCode(), pr, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT),
+            )
             .build()
         try {
             manager.notify(id, notification)

@@ -207,6 +207,8 @@ main {
 .timeline .row:only-child::before { display: none; }
 .timeline .avatar { box-shadow: 0 0 0 3px var(--surface); }
 .timeline .row.head .avatar { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent); }
+/* Commits that landed since your last visit: a small tonal pill in the app's own accent, off the author colors. */
+.meta .new { padding: 0 8px; border-radius: 999px; background: var(--accent-soft); color: var(--on-accent-soft); font-size: 11px; letter-spacing: .02em; }
 
 .more { display: flex; align-items: center; justify-content: center; width: 100%; height: 48px; margin-top: 16px; border-radius: 999px; background: var(--accent-soft); color: var(--on-accent-soft); font-size: 14px; font-weight: 500; }
 
@@ -237,6 +239,8 @@ main {
 .detail-body ul { margin: 0; padding-left: 22px; }
 .detail-body li + li { margin-top: 4px; }
 .detail-body li::marker { color: var(--a); }
+/* #123 links to the pull request: the author color (>= 4.6:1 on its wash), underlined since it sits in prose. */
+.commit .ref { color: var(--a); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; text-decoration-color: color-mix(in srgb, var(--a) 55%, transparent); }
 .detail-body > :not(:first-child) { margin-top: 12px; }
 .actions { display: flex; gap: 8px; margin-top: 18px; flex-wrap: wrap; }
 .pill { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 16px 0 12px; border-radius: 999px; border: 1px solid var(--line); font-size: 14px; font-weight: 500; color: var(--text); }

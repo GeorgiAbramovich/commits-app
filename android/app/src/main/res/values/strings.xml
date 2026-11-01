@@ -5,6 +5,8 @@
     <string name="widget_title">Pinned commits</string>
     <string name="widget_title_hint">Commits</string>
     <string name="widget_updated">Updated %1$s</string>
+    <string name="widget_new_updated">%1$d new · Updated %2$s</string>
+    <string name="widget_new">New</string>
     <string name="widget_refreshing">Refreshing…</string>
     <string name="widget_loading">Loading…</string>
     <string name="widget_signed_out">Tap to open Commits and connect GitHub</string>
@@ -15,4 +17,5 @@
     <string name="merges_channel">Merged pull requests</string>
     <string name="merges_channel_description">Pull requests merged in your pinned repos</string>
     <string name="merges_text">%1$s · merged into %2$s · %3$s</string>
+    <string name="merges_open_pr">Open PR</string>
 </resources>

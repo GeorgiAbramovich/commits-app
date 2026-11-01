@@ -51,6 +51,18 @@ object WidgetData {
         }
     }
 
+    /** Date of the newest commit the widget had when the app was last opened; newer ones count as new. */
+    fun seenAt(ctx: Context): Instant? = prefs(ctx).getLong("seen", 0).takeIf { it > 0 }?.let(Instant::ofEpochMilli)
+
+    /** Moves [seenAt] up to the newest cached commit. Returns whether it changed, i.e. the widget needs a redraw. */
+    fun markSeen(ctx: Context): Boolean {
+        val newest = commits(ctx).maxOfOrNull { it.date }?.toEpochMilli() ?: return false
+        val p = prefs(ctx)
+        if (newest <= p.getLong("seen", 0)) return false
+        p.edit().putLong("seen", newest).apply()
+        return true
+    }
+
     /** Called from the web app whenever the token or pins change. Refreshes the widget only if something changed. */
     fun saveSession(ctx: Context, token: String?, pins: List<String>) {
         val pinsJson = JSONArray(pins).toString()
@@ -59,7 +71,7 @@ object WidgetData {
         p.edit().apply {
             if (token == null) remove("token") else putString("token", token)
             putString("pins", pinsJson)
-            if (token == null) remove("items").remove("updated").remove("error")
+            if (token == null) remove("items").remove("updated").remove("error").remove("seen")
         }.apply()
         CommitsWidget.refreshNow(ctx)
         CommitsWidget.render(ctx)
@@ -86,10 +98,13 @@ object WidgetData {
         // Keep showing the last good list if every request failed (e.g. offline).
         if (all.isNotEmpty() || error == null) {
             val items = JSONArray()
-            all.sortedByDescending { it.date }.take(MAX_ITEMS).forEach {
+            val kept = all.sortedByDescending { it.date }.take(MAX_ITEMS)
+            kept.forEach {
                 items.put(JSONObject().put("repo", it.repo).put("sha", it.sha).put("title", it.title).put("author", it.author).put("date", it.date.toString()))
             }
             p.putString("items", items.toString()).putLong("updated", System.currentTimeMillis())
+            // The first list ever fetched is the starting point, so nothing shows as new before you've looked once.
+            if (prefs(ctx).getLong("seen", 0) == 0L) kept.firstOrNull()?.let { p.putLong("seen", it.date.toEpochMilli()) }
         }
         if (error == null) p.remove("error") else p.putString("error", error)
         p.apply()

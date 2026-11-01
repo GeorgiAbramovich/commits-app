@@ -98,6 +98,11 @@ class CommitsWidget : AppWidgetProvider() {
 
             val state = WidgetData.state(ctx)
             val updated = WidgetData.updatedAt(ctx)
+            val commits = if (state == WidgetData.State.OK) WidgetData.commits(ctx) else emptyList()
+            // Commits newer than the newest one there was when the app was last opened.
+            val seen = WidgetData.seenAt(ctx)
+            val isNew = { c: WidgetCommit -> seen != null && c.date > seen }
+            val newCount = commits.count(isNew)
             // With a single pinned repo its name goes in the title instead of on every row.
             val pins = WidgetData.pins(ctx)
             val singleRepo = pins.size == 1
@@ -111,12 +116,13 @@ class CommitsWidget : AppWidgetProvider() {
                     refreshing -> ctx.getString(R.string.widget_refreshing)
                     state != WidgetData.State.OK -> ctx.getString(R.string.widget_title_hint)
                     WidgetData.error(ctx) != null -> WidgetData.error(ctx)
+                    updated != null && newCount > 0 ->
+                        ctx.getString(R.string.widget_new_updated, newCount, ago(ctx, updated.toEpochMilli(), now))
                     updated != null -> ctx.getString(R.string.widget_updated, ago(ctx, updated.toEpochMilli(), now))
                     else -> ctx.getString(R.string.widget_loading)
                 },
             )
 
-            val commits = if (state == WidgetData.State.OK) WidgetData.commits(ctx) else emptyList()
             views.setTextViewText(
                 R.id.empty,
                 ctx.getString(
@@ -143,6 +149,7 @@ class CommitsWidget : AppWidgetProvider() {
                 row.setColorInt(R.id.author, "setTextColor", light, dark)
                 row.setTextViewText(R.id.author, c.author)
                 row.setTextViewText(R.id.time, " · ${ago(ctx, c.date.toEpochMilli(), now)}")
+                row.setViewVisibility(R.id.fresh, if (isNew(c)) View.VISIBLE else View.GONE)
                 row.setTextViewText(R.id.repo, c.repo.substringAfter('/'))
                 row.setViewVisibility(R.id.repo, if (singleRepo) View.GONE else View.VISIBLE)
                 row.setTextViewText(R.id.message, c.title)

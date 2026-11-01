@@ -46,6 +46,21 @@
                 android:textColor="@color/widget_text_muted"
                 android:textSize="12sp" />
 
+            <!-- Shown on commits newer than when the app was last opened. -->
+            <TextView
+                android:id="@+id/fresh"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/widget_new_bg"
+                android:fontFamily="sans-serif-medium"
+                android:maxLines="1"
+                android:paddingHorizontal="6dp"
+                android:text="@string/widget_new"
+                android:textColor="@color/widget_on_accent"
+                android:textSize="11sp"
+                android:visibility="gone" />
+
             <TextView
                 android:id="@+id/repo"
                 android:layout_width="0dp"

@@ -1,6 +1,6 @@
 // Caches the app shell so it opens instantly and offline. GitHub API calls are never cached:
 // they go to api.github.com, a different origin, which this worker ignores.
-const CACHE = 'commits-v7';
+const CACHE = 'commits-v8';
 const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'manifest.webmanifest', 'icon.svg', 'icon-180.png', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png'];
 
 self.addEventListener('install', e => {
