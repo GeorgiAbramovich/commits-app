@@ -1,0 +1,12 @@
+# OS and editor files
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp
+
+# Local scratch
+*.log
+.env
+node_modules/

@@ -1,0 +1,26 @@
+{
+  "id": "./",
+  "name": "Commits",
+  "short_name": "Commits",
+  "description": "A simple, read-only browser for the latest GitHub commits across your organizations.",
+  "lang": "en",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#131318",
+  "theme_color": "#131318",
+  "categories": ["productivity", "utilities"],
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "screenshots": [
+    { "src": "docs/screenshots/home-light.png", "sizes": "824x1830", "type": "image/png", "form_factor": "narrow", "label": "Repositories sorted by latest push, with pinned repos on top" },
+    { "src": "docs/screenshots/repo-light.png", "sizes": "824x1830", "type": "image/png", "form_factor": "narrow", "label": "Commits grouped by day, with a branch picker" },
+    { "src": "docs/screenshots/commit-light.png", "sizes": "824x1830", "type": "image/png", "form_factor": "narrow", "label": "Commit details with colored diffs" },
+    { "src": "docs/screenshots/repo-dark.png", "sizes": "824x1830", "type": "image/png", "form_factor": "narrow", "label": "Dark theme follows your system setting" }
+  ]
+}
