@@ -1,0 +1,14 @@
+<resources>
+    <string name="app_name">Commits</string>
+    <string name="widget_name">Pinned commits</string>
+    <string name="widget_description">The newest commits across the repos you pinned</string>
+    <string name="widget_title">Pinned commits</string>
+    <string name="widget_title_hint">Commits</string>
+    <string name="widget_updated">Updated %1$s</string>
+    <string name="widget_refreshing">Refreshing…</string>
+    <string name="widget_loading">Loading…</string>
+    <string name="widget_signed_out">Tap to open Commits and connect GitHub</string>
+    <string name="widget_no_pins">Tap to open Commits, then star a repo to pin it here</string>
+    <string name="widget_no_commits">No commits in your pinned repos yet</string>
+    <string name="refresh">Refresh</string>
+</resources>

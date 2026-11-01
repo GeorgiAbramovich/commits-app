@@ -25,6 +25,10 @@ let token = store.get('token', null);
 let pins = store.get('pins', []);
 const cache = new Map();
 
+// Inside the Android app, hand the token and pins to the home screen widget.
+const native = window.CommitsAndroid;
+const syncNative = () => native?.postMessage(JSON.stringify({ token, pins }));
+
 // ---------- helpers ----------
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const enc = encodeURIComponent;
@@ -366,6 +370,7 @@ function setupView(error = '') {
     try {
       const me = await gh('/user', { fresh: true });
       store.set('token', token);
+      syncNative();
       toast(`Signed in as ${me.login}`);
       route();
     } catch (err) {
@@ -380,6 +385,7 @@ function signOut() {
   token = null;
   store.del('token');
   cache.clear();
+  syncNative();
 }
 
 async function settingsView(stale) {
@@ -451,6 +457,7 @@ async function homeView(stale) {
       const name = row.dataset.r;
       pins = pins.includes(name) ? pins.filter(p => p !== name) : [...pins, name];
       store.set('pins', pins);
+      syncNative();
       buzz(10);
       toast(pins.includes(name) ? 'Pinned to the top' : 'Unpinned');
       draw();
@@ -649,9 +656,10 @@ function fileRow(f) {
 }
 
 // ---------- boot ----------
-if ('serviceWorker' in navigator && location.protocol === 'https:') {
+if (!native && 'serviceWorker' in navigator && location.protocol === 'https:') {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 seedHistory();
 syncThemeColor();
+syncNative();
 route();

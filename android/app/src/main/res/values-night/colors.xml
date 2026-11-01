@@ -1,0 +1,8 @@
+<resources>
+    <color name="app_bg">#131318</color>
+    <color name="widget_bg">@android:color/system_neutral1_900</color>
+    <color name="widget_text">@android:color/system_neutral1_50</color>
+    <color name="widget_text_muted">@android:color/system_neutral2_300</color>
+    <color name="widget_accent">@android:color/system_accent1_200</color>
+    <color name="widget_row_bg">@android:color/system_neutral2_800</color>
+</resources>

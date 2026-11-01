@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ripple xmlns:android="http://schemas.android.com/apk/res/android" android:color="?android:attr/colorControlHighlight">
+    <item>
+        <shape>
+            <solid android:color="@color/widget_row_bg" />
+            <corners android:radius="@android:dimen/system_app_widget_inner_radius" />
+        </shape>
+    </item>
+</ripple>
