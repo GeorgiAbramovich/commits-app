@@ -108,7 +108,7 @@
                 android:ellipsize="end"
                 android:fontFamily="sans-serif-medium"
                 android:maxLines="1"
-                android:textSize="13sp" />
+                android:textSize="12sp" />
 
             <TextView
                 android:text=" · 14 min. ago"
@@ -116,7 +116,7 @@
                 android:layout_height="wrap_content"
                 android:maxLines="1"
                 android:textColor="@color/widget_text_muted"
-                android:textSize="13sp" />
+                android:textSize="12sp" />
 
             <TextView
                 android:text=""
@@ -137,8 +137,9 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="3dp"
             android:ellipsize="end"
-            android:lineSpacingExtra="2dp"
+            android:lineSpacingExtra="3dp"
             android:maxLines="2"
+            android:fontFamily="sans-serif-medium"
             android:textColor="@color/widget_text"
             android:textSize="15sp" />
     </LinearLayout>
@@ -183,7 +184,7 @@
                 android:ellipsize="end"
                 android:fontFamily="sans-serif-medium"
                 android:maxLines="1"
-                android:textSize="13sp" />
+                android:textSize="12sp" />
 
             <TextView
                 android:text=" · 2 hr. ago"
@@ -191,7 +192,7 @@
                 android:layout_height="wrap_content"
                 android:maxLines="1"
                 android:textColor="@color/widget_text_muted"
-                android:textSize="13sp" />
+                android:textSize="12sp" />
 
             <TextView
                 android:text=""
@@ -212,8 +213,9 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="3dp"
             android:ellipsize="end"
-            android:lineSpacingExtra="2dp"
+            android:lineSpacingExtra="3dp"
             android:maxLines="2"
+            android:fontFamily="sans-serif-medium"
             android:textColor="@color/widget_text"
             android:textSize="15sp" />
     </LinearLayout>
@@ -258,7 +260,7 @@
                 android:ellipsize="end"
                 android:fontFamily="sans-serif-medium"
                 android:maxLines="1"
-                android:textSize="13sp" />
+                android:textSize="12sp" />
 
             <TextView
                 android:text=" · Yesterday"
@@ -266,7 +268,7 @@
                 android:layout_height="wrap_content"
                 android:maxLines="1"
                 android:textColor="@color/widget_text_muted"
-                android:textSize="13sp" />
+                android:textSize="12sp" />
 
             <TextView
                 android:text=""
@@ -287,8 +289,9 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="3dp"
             android:ellipsize="end"
-            android:lineSpacingExtra="2dp"
+            android:lineSpacingExtra="3dp"
             android:maxLines="2"
+            android:fontFamily="sans-serif-medium"
             android:textColor="@color/widget_text"
             android:textSize="15sp" />
     </LinearLayout>
