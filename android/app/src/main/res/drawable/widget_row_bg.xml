@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Each commit is a soft card on the tinted widget background. -->
+<!-- Each commit sits on a tonal (secondary container) surface, a step darker than the widget in light mode and a step lighter in dark mode. -->
 <ripple xmlns:android="http://schemas.android.com/apk/res/android" android:color="#26888888">
     <item>
         <shape>

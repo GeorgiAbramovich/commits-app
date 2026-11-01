@@ -126,10 +126,11 @@ class CommitsWidget : AppWidgetProvider() {
                 ),
             )
 
+            val colors = authorColors(commits.map { it.author })
             val items = RemoteViews.RemoteCollectionItems.Builder().setViewTypeCount(1)
             commits.forEachIndexed { i, c ->
                 val row = RemoteViews(ctx.packageName, R.layout.widget_row)
-                val (light, dark) = authorColor(c.author)
+                val (light, dark) = colors.getValue(c.author)
                 row.setColorInt(R.id.dot, "setColorFilter", light, dark)
                 row.setColorInt(R.id.author, "setTextColor", light, dark)
                 row.setTextViewText(R.id.author, c.author)
@@ -159,22 +160,38 @@ class CommitsWidget : AppWidgetProvider() {
             return PendingIntent.getActivity(ctx, requestCode, intent, flags)
         }
 
-        // Each author keeps one color: a deeper shade for light mode and a softer one for dark mode.
+        // Each author keeps one color: a deep shade for light mode and a soft one for dark mode.
+        // All pairs measure >= 4.5:1 against the row surface (tone 90 light / tone 20 dark).
         private val AUTHOR_COLORS = listOf(
-            0xFF00796B to 0xFF4DB6AC, // teal
-            0xFFE65100 to 0xFFFFB74D, // orange
-            0xFFC2185B to 0xFFF48FB1, // pink
-            0xFF1565C0 to 0xFF64B5F6, // blue
+            0xFF00695C to 0xFF4DB6AC, // teal
+            0xFFB23C00 to 0xFFFFB74D, // orange
+            0xFFAD1457 to 0xFFF48FB1, // pink
+            0xFF1259B5 to 0xFF64B5F6, // blue
             0xFF6A1B9A to 0xFFCE93D8, // purple
-            0xFF2E7D32 to 0xFF81C784, // green
-            0xFF8D6E00 to 0xFFFFD54F, // amber
+            0xFF236C28 to 0xFF81C784, // green
+            0xFF7A5C00 to 0xFFFFD54F, // amber
             0xFF3949AB to 0xFF9FA8DA, // indigo
-            0xFFC62828 to 0xFFEF9A9A, // red
-            0xFF00838F to 0xFF4DD0E1, // cyan
+            0xFFB71C1C to 0xFFEF9A9A, // red
+            0xFF006874 to 0xFF4DD0E1, // cyan
         ).map { (l, d) -> l.toInt() to d.toInt() }
 
-        private fun authorColor(author: String) =
-            AUTHOR_COLORS[Math.floorMod(author.lowercase().hashCode(), AUTHOR_COLORS.size)]
+        /**
+         * Each author starts from a color derived from their name, so it stays the same across refreshes.
+         * If someone else in the list already has it, they take the next free one, so up to
+         * [AUTHOR_COLORS].size people on screen never share a color.
+         */
+        private fun authorColors(authors: List<String>): Map<String, Pair<Int, Int>> {
+            val taken = BooleanArray(AUTHOR_COLORS.size)
+            val result = mutableMapOf<String, Pair<Int, Int>>()
+            for (author in authors.distinct()) {
+                var slot = Math.floorMod(author.lowercase().hashCode(), AUTHOR_COLORS.size)
+                if (taken.all { it }) taken.fill(false)
+                while (taken[slot]) slot = (slot + 1) % AUTHOR_COLORS.size
+                taken[slot] = true
+                result[author] = AUTHOR_COLORS[slot]
+            }
+            return result
+        }
 
         /** "14 min. ago" today, "Yesterday", then the date ("Oct 28"; with the year if it isn't this year). */
         private fun ago(ctx: Context, then: Long, now: Long): String {

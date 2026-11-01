@@ -79,7 +79,7 @@
     android:paddingVertical="12dp">
 
     <ImageView
-        android:tint="#00796B"
+        android:tint="#00695C"
         android:layout_width="10dp"
         android:layout_height="10dp"
         android:layout_marginTop="5dp"
@@ -101,7 +101,7 @@
 
             <TextView
                 android:text="dana"
-                android:textColor="#00796B"
+                android:textColor="#00695C"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:ellipsize="end"
@@ -153,7 +153,7 @@
     android:paddingVertical="12dp">
 
     <ImageView
-        android:tint="#E65100"
+        android:tint="#B23C00"
         android:layout_width="10dp"
         android:layout_height="10dp"
         android:layout_marginTop="5dp"
@@ -175,7 +175,7 @@
 
             <TextView
                 android:text="omer"
-                android:textColor="#E65100"
+                android:textColor="#B23C00"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:ellipsize="end"
@@ -227,7 +227,7 @@
     android:paddingVertical="12dp">
 
     <ImageView
-        android:tint="#00796B"
+        android:tint="#00695C"
         android:layout_width="10dp"
         android:layout_height="10dp"
         android:layout_marginTop="5dp"
@@ -249,7 +249,7 @@
 
             <TextView
                 android:text="dana"
-                android:textColor="#00796B"
+                android:textColor="#00695C"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:ellipsize="end"
