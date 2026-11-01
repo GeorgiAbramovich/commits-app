@@ -259,9 +259,14 @@ main {
 .file { background: var(--card); border-radius: 16px; overflow: hidden; }
 .file summary { list-style: none; display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 10px 8px 10px 14px; cursor: pointer; }
 .file summary::-webkit-details-marker { display: none; }
-.file .fname { flex: 1; min-width: 0; font-family: var(--mono); font-size: 13px; line-height: 18px; font-weight: 500; overflow-wrap: anywhere; }
-.file .fname em { display: block; overflow-wrap: break-word; color: var(--muted); font-family: var(--sans); font-style: normal; font-size: 12px; line-height: 16px; font-weight: 400; margin-top: 2px; }
-.file .counts { display: flex; flex-direction: column; align-items: flex-end; font: 500 12px/16px var(--mono); flex: none; }
+/* The name gets the full width; status, counts and folder sit on a quiet line under it. */
+.file .finfo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+/* File names read as names, not code: sans, and they break only at - _ . (see fileRow) unless a part can't fit. */
+.file .fname { font-size: 15px; line-height: 20px; font-weight: 500; overflow-wrap: break-word; }
+.file .fmeta { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; line-height: 16px; color: var(--muted); }
+.file .fmeta .status { margin-top: -3px; }
+.file .counts { display: flex; gap: 6px; font: 500 12px/16px var(--mono); flex: none; }
+.file .fdir { flex: 1; min-width: 0; overflow-wrap: break-word; font-style: normal; }
 .file .chev { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; flex: none; background: var(--chip); color: var(--text); }
 .file .chev svg { width: 20px; height: 20px; transition: transform .2s var(--ease); }
 .file[open] .chev svg { transform: rotate(180deg); }

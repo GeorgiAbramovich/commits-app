@@ -754,9 +754,14 @@ function fileRow(f, open = false) {
   return `
     <details class="file ${esc(f.status)}"${open && f.patch ? ' open' : ''}>
       <summary>
-        <span class="status ${esc(f.status)}" title="${label}">${letter}</span>
-        <span class="fname">${esc(base)}${dir ? `<em>${esc(dir).replace(/\//g, '/<wbr>')}</em>` : ''}</span>
-        <span class="counts">${f.additions ? `<span class="add">+${f.additions}</span>` : ''}${f.deletions ? `<span class="del">−${f.deletions}</span>` : ''}</span>
+        <span class="finfo">
+          <span class="fname">${esc(base).replace(/([-_.])/g, '$1<wbr>')}</span>
+          <span class="fmeta">
+            <span class="status ${esc(f.status)}" title="${label}">${letter}</span>
+            <span class="counts">${f.additions ? `<span class="add">+${f.additions}</span>` : ''}${f.deletions ? `<span class="del">−${f.deletions}</span>` : ''}</span>
+            ${dir ? `<em class="fdir">${esc(dir).replace(/\//g, '/<wbr>')}</em>` : ''}
+          </span>
+        </span>
         <span class="chev" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></span>
       </summary>
       ${patch}
