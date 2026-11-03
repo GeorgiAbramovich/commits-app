@@ -188,7 +188,21 @@ main {
   height: 48px; padding: 0 16px; border-radius: 999px; background: var(--surface-2); color: var(--text);
 }
 .branch svg { width: 20px; height: 20px; color: var(--muted); flex: none; }
-.branch select { flex: 1; min-width: 0; height: 100%; appearance: none; -webkit-appearance: none; background: none; border: 0; color: inherit; font: inherit; font-family: var(--mono); font-size: 14px; font-weight: 500; outline: none; }
+button.branch { width: 100%; text-align: left; }
+.branch-name, .branch input { flex: 1; min-width: 0; font: 500 14px var(--mono); color: inherit; }
+.branch-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Branch search: the pill turns into the field, matches list under it. */
+.branch-pick .branch:focus-within { box-shadow: inset 0 0 0 2px var(--accent); }
+.branch input { height: 100%; background: none; border: 0; outline: none; padding: 0; -webkit-appearance: none; appearance: none; }
+.branch input::placeholder { color: var(--muted); font-family: var(--sans); font-weight: 400; }
+.branch-list { margin-top: 8px; }
+.branch-row { align-items: center; gap: 10px; min-height: 52px; padding: 12px 16px; }
+.branch-label { flex: 1; min-width: 0; font: 400 14px/20px var(--mono); overflow-wrap: anywhere; color: var(--muted); }
+.branch-label mark { background: none; color: var(--text); font-weight: 700; }
+.branch-pick:has(input:placeholder-shown) .branch-label, .branch-row[aria-selected="true"] .branch-label { color: var(--text); }
+.branch-row .badge { flex: none; }
+.branch-row .check { width: 20px; height: 20px; flex: none; color: var(--accent); }
+.branch-more { color: var(--muted); font-size: 13px; justify-content: center; min-height: 48px; }
 .avatar { width: 36px; height: 36px; border-radius: 50%; flex: none; background: var(--surface-2); object-fit: cover; }
 .avatar.ph { display: grid; place-items: center; font-size: 15px; font-weight: 500; color: var(--on-accent-soft); background: var(--accent-soft); }
 .commit-msg { font-weight: 500; font-size: 15px; line-height: 20px; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }

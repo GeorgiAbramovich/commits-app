@@ -218,6 +218,7 @@ const buzz = ms => { try { navigator.vibrate?.(ms); } catch {} };
 // Android back gesture walk the same stack, even after a reload. Scroll position is saved per entry.
 history.scrollRestoration = 'manual';
 let here = 0;
+let dismiss = null; // closes an overlay that pushed its own entry (see branchPicker)
 
 function parentOf(hash) {
   const p = hash.replace(/^#\/?/, '').split('?')[0].split('/');
@@ -261,6 +262,8 @@ function goHome() {
 }
 
 addEventListener('popstate', () => {
+  // An open overlay (the branch search) owns the entry on top: popping it just closes it.
+  if (dismiss) { const close = dismiss; dismiss = null; return close(); }
   const s = history.state;
   if (s && typeof s.d === 'number') {
     here = s.d;
@@ -633,7 +636,7 @@ async function repoView(owner, name, branch, stale) {
 
   const [repo, branches] = await Promise.all([
     gh(`/repos/${enc(owner)}/${enc(name)}`),
-    gh(`/repos/${enc(owner)}/${enc(name)}/branches?per_page=100`),
+    allBranches(owner, name),
   ]);
   if (stale()) return;
   branch = branch || repo.default_branch;
@@ -642,15 +645,14 @@ async function repoView(owner, name, branch, stale) {
   names.sort((a, b) => (a === repo.default_branch ? -1 : b === repo.default_branch ? 1 : a.localeCompare(b)));
 
   view.innerHTML = `
-    <label class="branch fade">
-      <svg viewBox="0 0 24 24"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="7" r="2"/><path d="M6 7v10M18 9c0 5-12 3-12 8"/></svg>
-      <select aria-label="Branch">${names.map(n => `<option${n === branch ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select>
+    <button class="branch fade" id="branchBtn" aria-label="Branch ${esc(branch)}, change branch">
+      ${BRANCH_ICON}<span class="branch-name">${esc(branch)}</span>
       <svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
-    </label>
+    </button>
     <div id="pr"></div>
     <div id="commits"></div>`;
-  view.querySelector('select').onchange = e =>
-    replaceNav(`#/r/${enc(owner)}/${enc(name)}/${enc(e.target.value)}`);
+  view.querySelector('#branchBtn').onclick = () =>
+    branchPicker(names, branch, repo.default_branch, n => `#/r/${enc(owner)}/${enc(name)}/${enc(n)}`);
   // Only people who can push get the pull request card; it loads beside the commits, never blocking them.
   if (branch !== repo.default_branch && repo.permissions?.push) {
     prCard(view.querySelector('#pr'), repo, branch, names, stale).catch(e => { if (!stale()) showError(e, view.querySelector('#pr')); });
@@ -820,6 +822,115 @@ async function prOpenCard(box, repo, number, stale) {
       merge.disabled = false; merge.textContent = label;
     }
   };
+}
+
+// ---------- branches ----------
+const BRANCH_ICON = '<svg viewBox="0 0 24 24"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="7" r="2"/><path d="M6 7v10M18 9c0 5-12 3-12 8"/></svg>';
+
+// Every branch, 100 a page, so search finds the old ones too. Stops at 1,000.
+async function allBranches(owner, name) {
+  let all = [];
+  for (let page = 1; page <= 10; page++) {
+    const data = await gh(`/repos/${enc(owner)}/${enc(name)}/branches?per_page=100&page=${page}`);
+    all = all.concat(data);
+    if (data.length < 100) break;
+  }
+  return all;
+}
+
+// Fuzzy match: the query's letters in order, gaps allowed, so "lgfl" finds feature/login-flow.
+// Runs and word starts (after / - _ . or a lowercase-to-uppercase step) score higher; a plain
+// substring beats any scattered match. Returns { score, hits } or null.
+const wordStart = (s, i) => i === 0 || /[\/\-_.\s]/.test(s[i - 1]) || (/[a-z]/.test(s[i - 1]) && /[A-Z]/.test(s[i]));
+function fuzzy(q, s) {
+  const lower = s.toLowerCase();
+  if (!q) return { score: 0, hits: [] };
+  const sub = [...lower.matchAll(new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'))].map(m => m.index);
+  if (sub.length) {
+    const at = sub.find(i => wordStart(s, i)) ?? sub[0];
+    return { score: 1000 + (wordStart(s, at) ? 100 : 0) - at - s.length / 100, hits: Array.from(q, (_, k) => at + k) };
+  }
+  // Greedy left to right, but jump to a word start for a letter that doesn't continue a run, when
+  // the rest of the query still fits after it. Either way every letter matches in order.
+  const fits = (qi, from) => { for (let k = qi; k < q.length; k++) if ((from = lower.indexOf(q[k], from) + 1) === 0) return false; return true; };
+  const hits = [];
+  let from = 0, score = 0;
+  for (let k = 0; k < q.length; k++) {
+    let i = lower.indexOf(q[k], from);
+    if (i < 0) return null;
+    if (i !== hits.at(-1) + 1 && !wordStart(s, i)) {
+      for (let j = lower.indexOf(q[k], i + 1); j >= 0; j = lower.indexOf(q[k], j + 1)) {
+        if (wordStart(s, j) && fits(k + 1, j + 1)) { i = j; break; }
+      }
+    }
+    score += 1 + (i === hits.at(-1) + 1 ? 5 : 0) + (wordStart(s, i) ? 8 : 0) - Math.min(i - from, 10) * .3;
+    hits.push(i);
+    from = i + 1;
+  }
+  return { score: score - s.length / 100, hits };
+}
+
+// The branch button opens a search in place of the commits. It gets its own history entry, so the
+// back gesture closes it instead of leaving the repo; picking a branch closes it the same way.
+function branchPicker(names, current, def, hashFor) {
+  const btn = view.querySelector('#branchBtn');
+  const below = [...view.children].filter(el => el !== btn);
+  btn.hidden = true;
+  below.forEach(el => (el.hidden = true));
+  btn.insertAdjacentHTML('afterend', `
+    <div class="branch-pick">
+      <label class="branch">${BRANCH_ICON}
+        <input type="search" placeholder="Find a branch" aria-label="Find a branch" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="go">
+      </label>
+      <div class="list branch-list" role="listbox" aria-label="Branches"></div>
+    </div>`);
+  const pick = btn.nextElementSibling;
+  const input = pick.querySelector('input');
+  const list = pick.querySelector('.branch-list');
+  const wasPull = pullEnabled;
+  pullEnabled = false;
+  history.pushState({ ...history.state }, '');
+  dismiss = () => {
+    pullEnabled = wasPull;
+    if (!pick.isConnected) return; // a refresh already redrew the screen
+    pick.remove();
+    btn.hidden = false;
+    below.forEach(el => (el.hidden = false));
+  };
+  const choose = n => {
+    if (n !== current) {
+      const close = dismiss;
+      dismiss = () => { close(); replaceNav(hashFor(n)); };
+    }
+    history.back();
+  };
+
+  let shown = [];
+  const draw = () => {
+    const q = input.value.toLowerCase().replace(/\s+/g, '');
+    // No query: default branch, then the one you're on, then A to Z.
+    shown = names.map(n => ({ n, m: fuzzy(q, n) })).filter(r => r.m)
+      .sort((a, b) => b.m.score - a.m.score || (b.n === def) - (a.n === def) || (b.n === current) - (a.n === current) || a.n.localeCompare(b.n));
+    const more = shown.length - 60;
+    list.innerHTML = shown.length ? shown.slice(0, 60).map(({ n, m }) => {
+      const hit = new Set(m.hits);
+      const label = Array.from(n, (ch, i) => (hit.has(i) ? `<mark>${esc(ch)}</mark>` : esc(ch)) + (ch === '/' ? '<wbr>' : '')).join('');
+      return `<button class="row branch-row" role="option" aria-selected="${n === current}" data-n="${esc(n)}">
+        <span class="branch-label">${label}</span>
+        ${n === def ? '<span class="badge">default</span>' : ''}
+        ${n === current ? '<svg class="check" viewBox="0 0 24 24" aria-label="Current branch"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>' : ''}
+      </button>`;
+    }).join('') + (more > 0 ? `<div class="row branch-more">${more} more. Keep typing to narrow it down.</div>` : '')
+      : `<div class="empty">No branch matches “${esc(input.value.trim())}”</div>`;
+  };
+  list.onclick = e => { const row = e.target.closest('[data-n]'); if (row) choose(row.dataset.n); };
+  input.oninput = draw;
+  input.onkeydown = e => {
+    if (e.key === 'Enter' && shown.length) { e.preventDefault(); choose(shown[0].n); }
+    else if (e.key === 'Escape') history.back();
+  };
+  draw();
+  input.focus();
 }
 
 // The name the widget colors by: the GitHub login, or the git author name without one.
