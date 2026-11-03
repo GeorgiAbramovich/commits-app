@@ -2,7 +2,7 @@
   "id": "./",
   "name": "Commits",
   "short_name": "Commits",
-  "description": "A simple, read-only browser for the latest GitHub commits across your organizations.",
+  "description": "A simple browser for the latest GitHub commits across your organizations, with pull requests you can open and merge.",
   "lang": "en",
   "dir": "ltr",
   "start_url": "./",

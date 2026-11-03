@@ -6,7 +6,7 @@ Thanks for helping. Commits is deliberately small, and that is the feature. Befo
 - **No backend and no third-party requests.** The app only talks to `api.github.com` (plus avatar images).
   No analytics, fonts or CDNs.
 - **Escape everything from GitHub.** Any API text that goes into `innerHTML` must go through `esc()`.
-- **Read-only.** The app never writes to GitHub.
+- **Reading first.** The only writes are opening and merging a pull request, always behind a tap you meant to make.
 - **Keep changes focused.** One fix or feature per pull request. For anything bigger, open an issue first.
 
 ## Checking your change

@@ -1,6 +1,6 @@
 # Commits
 
-A small, read-only GitHub commit browser for your phone. Pick an org, pick a repo, and see what landed today.
+A small GitHub commit browser for your phone. Pick an org, pick a repo, and see what landed today. Open and squash-merge pull requests too.
 No backend, no build step, no tracking: just static files that talk to `api.github.com` with your token.
 
 <p>
@@ -15,6 +15,7 @@ No backend, no build step, no tracking: just static files that talk to `api.gith
 - Repositories sorted by most recent push, with search and pinning
 - Commits grouped by day, with a branch picker and "load older"
 - Commit details with expandable, colored diffs
+- Pull requests: on a branch other than the default, open one into any branch, see whether it can merge, and squash and merge it
 - Installable on Android: pull to refresh, system back gesture, light and dark theme, opens offline
 - Optional native Android app with a home screen widget of the newest commits in your pinned repos
 
@@ -59,10 +60,10 @@ private storage, which Android doesn't back up.
 
 Commits needs a GitHub personal access token (classic) with these scopes:
 
-| Scope      | Why                                          |
-| ---------- | -------------------------------------------- |
-| `repo`     | Read private repositories and their commits  |
-| `read:org` | List the organizations you belong to         |
+| Scope      | Why                                                                       |
+| ---------- | ------------------------------------------------------------------------- |
+| `repo`     | Read private repositories and their commits, open and merge pull requests |
+| `read:org` | List the organizations you belong to                                      |
 
 [Create a token with these scopes](https://github.com/settings/tokens/new?scopes=repo,read:org&description=Commits%20app).
 
