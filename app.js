@@ -378,7 +378,7 @@ addEventListener('touchcancel', () => { pullStart = null; if (!refreshing) pullR
 
 // ---------- ripple ----------
 // Waits a beat on touch so a scroll that starts on a row doesn't flash it.
-const RIPPLE = '.row, .chip, .icon-btn, .text-btn, .pill, .more, .primary, .pin, .branch, .file summary, .toggle-all, .quiet-btn';
+const RIPPLE = '.row, .chip, .icon-btn, .text-btn, .pill, .more, .primary, .pin, .branch, .file summary, .toggle-all, .quiet-btn, a.ck, .pr-checks summary';
 document.addEventListener('pointerdown', e => {
   const el = e.target.closest(RIPPLE);
   if (!el || el.disabled || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
@@ -777,7 +777,75 @@ const PR_STATE = {
   draft: ['', 'Draft. Mark it ready on GitHub to merge.', true],
 };
 
-async function prOpenCard(box, repo, number, stale) {
+// CI on the PR's head commit: check runs (Actions and apps) and old-style commit statuses, one row
+// per name, latest run wins. tone: ok, bad, run (not finished) or skip.
+async function prChecks(p, sha) {
+  const [runs, combined] = await Promise.all([
+    gh(`${p}/commits/${sha}/check-runs?per_page=100`, { fresh: true }).catch(() => ({ check_runs: [] })),
+    gh(`${p}/commits/${sha}/status`, { fresh: true }).catch(() => ({ statuses: [] })),
+  ]);
+  const latest = new Map();
+  for (const r of runs.check_runs) {
+    const had = latest.get(r.name);
+    if (!had || (r.started_at || '') > (had.started_at || '')) latest.set(r.name, r);
+  }
+  const RUN = { success: 'ok', failure: 'bad', timed_out: 'bad', cancelled: 'bad', action_required: 'bad', startup_failure: 'bad' };
+  const checks = [...latest.values()].map(r => ({
+    name: r.name,
+    url: r.html_url || r.details_url,
+    tone: r.status !== 'completed' ? 'run' : RUN[r.conclusion] || 'skip',
+    note: r.status !== 'completed' ? (r.status === 'queued' ? 'Queued' : 'Running') : { success: 'Passed', skipped: 'Skipped', neutral: 'Neutral', cancelled: 'Cancelled', timed_out: 'Timed out', action_required: 'Needs action', stale: 'Stale' }[r.conclusion] || 'Failed',
+  }));
+  for (const st of combined.statuses || []) { // already the latest per context
+    checks.push({ name: st.context, url: st.target_url, tone: { success: 'ok', pending: 'run' }[st.state] || 'bad', note: st.description || { success: 'Passed', pending: 'Pending' }[st.state] || 'Failed' });
+  }
+  // Failures first, then what's still running, then passed and skipped.
+  const order = { bad: 0, run: 1, ok: 2, skip: 3 };
+  return checks.sort((a, b) => order[a.tone] - order[b.tone] || a.name.localeCompare(b.name));
+}
+
+// Reviews: each person's latest verdict, plus whoever has been asked and hasn't answered yet.
+async function prReviews(p, pr) {
+  const reviews = await gh(`${p}/pulls/${pr.number}/reviews?per_page=100`, { fresh: true }).catch(() => []);
+  const by = new Map();
+  for (const r of reviews) {
+    if (!r.user || !['APPROVED', 'CHANGES_REQUESTED', 'DISMISSED'].includes(r.state)) continue; // comments don't change a verdict
+    by.set(r.user.login, { who: r.user.login, avatar: r.user.avatar_url, state: r.state });
+  }
+  for (const u of pr.requested_reviewers || []) by.set(u.login, { who: u.login, avatar: u.avatar_url, state: 'REQUESTED' });
+  for (const t of pr.requested_teams || []) by.set('team:' + t.slug, { who: t.name, state: 'REQUESTED' });
+  return [...by.values()].filter(r => r.state !== 'DISMISSED');
+}
+
+const CHECK_ICONS = {
+  ok: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+  bad: '<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>',
+  run: '<circle cx="12" cy="12" r="7"/><path d="M12 8.5V12l2.5 1.5"/>',
+  skip: '<path d="M6 12h12"/>',
+};
+const REVIEW = { APPROVED: ['ok', 'Approved'], CHANGES_REQUESTED: ['bad', 'Requested changes'], REQUESTED: ['run', 'Review requested'] };
+
+function checksBlock(checks, reviews) {
+  if (!checks.length && !reviews.length) return '';
+  const count = tone => checks.filter(c => c.tone === tone).length;
+  const parts = [[count('bad'), 'failed'], [count('run'), 'running'], [count('ok'), 'passed'], [count('skip'), 'skipped']].filter(([n]) => n).map(([n, w]) => `${n} ${w}`);
+  const row = (tone, icon, main, note, url) => `
+    <${url ? `a href="${esc(url)}" target="_blank" rel="noopener"` : 'div'} class="ck ${tone}">
+      ${icon}<span class="ck-name">${main}</span><span class="ck-note">${esc(note)}</span>
+    </${url ? 'a' : 'div'}>`;
+  const mark = tone => `<svg class="ck-icon${tone === 'run' ? ' pulse' : ''}" viewBox="0 0 24 24" aria-hidden="true">${CHECK_ICONS[tone]}</svg>`;
+  // Opens on its own when something failed or is still running; all green stays a single line.
+  return `
+    ${reviews.length ? `<div class="pr-group">${reviews.map(r =>
+      row(REVIEW[r.state][0], r.avatar ? `<img class="ck-avatar" src="${esc(r.avatar)}&s=48" alt="">` : mark(REVIEW[r.state][0]), esc(r.who), REVIEW[r.state][1])).join('')}</div>` : ''}
+    ${checks.length ? `
+    <details class="pr-group pr-checks"${count('bad') || count('run') ? ' open' : ''}>
+      <summary><span>${plural(checks.length, 'check')}: ${parts.join(', ')}</span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></summary>
+      ${checks.map(c => row(c.tone, mark(c.tone), esc(c.name), c.note, c.url)).join('')}
+    </details>` : ''}`;
+}
+
+async function prOpenCard(box, repo, number, stale, again = false) {
   const p = `/repos/${encPath(repo.full_name)}`;
   let pr = await gh(`${p}/pulls/${number}`, { fresh: true });
   // GitHub works mergeability out in the background; ask again a few times while it does.
@@ -785,14 +853,25 @@ async function prOpenCard(box, repo, number, stale) {
     await new Promise(r => setTimeout(r, 1500));
     pr = await gh(`${p}/pulls/${number}`, { fresh: true });
   }
-  if (stale()) return;
-  const [tone, status, blocked] = pr.draft ? PR_STATE.draft : PR_STATE[pr.mergeable_state] || ['', 'Checking whether it can merge'];
+  const [checks, reviews] = await Promise.all([prChecks(p, pr.head.sha), prReviews(p, pr)]);
+  if (stale() || (again && !box.isConnected)) return;
+  // A check-in from the poll below never redraws over a merge in progress or a folded-open list.
+  if (again && (box.querySelector('#prMerge')?.disabled)) return;
+  const wasOpen = box.querySelector('.pr-checks')?.open;
+  let [tone, status, blocked] = pr.draft ? PR_STATE.draft : PR_STATE[pr.mergeable_state] || ['', 'Checking whether it can merge'];
+  // "Blocked" says more once we know what's holding it.
+  if (pr.mergeable_state === 'blocked' && !pr.draft) {
+    status = checks.some(c => c.tone === 'bad') ? 'Some checks failed'
+      : checks.some(c => c.tone === 'run') ? 'Waiting for checks to finish'
+      : reviews.some(r => r.state === 'CHANGES_REQUESTED') ? 'Changes were requested'
+      : 'Needs an approving review';
+  }
   // Always squash, unless the repo has turned squashing off; then whatever it does allow.
   const [method, label] = [['squash', 'Squash and merge', repo.allow_squash_merge], ['merge', 'Merge', repo.allow_merge_commit], ['rebase', 'Rebase and merge', repo.allow_rebase_merge]]
     .find(m => m[2] !== false);
 
   box.innerHTML = `
-    <section class="pr fade">
+    <section class="pr${again ? '' : ' fade'}">
       <div class="pr-head">
         <span class="pr-icon" aria-hidden="true">${MERGE_ICON}</span>
         <div class="pr-text">
@@ -801,11 +880,17 @@ async function prOpenCard(box, repo, number, stale) {
         </div>
       </div>
       <div class="pr-status ${tone}"><i aria-hidden="true"></i>${esc(status)}</div>
+      ${checksBlock(checks, reviews)}
       ${blocked ? '' : `
       <div class="pr-buttons">
         <button class="primary" id="prMerge">${label}</button>
       </div>`}
     </section>`;
+  if (again && wasOpen != null) { const d = box.querySelector('.pr-checks'); if (d) d.open = wasOpen; }
+  // While checks run (or GitHub is still working mergeability out), look again every 15 seconds.
+  if (checks.some(c => c.tone === 'run') || pr.mergeable === null) {
+    setTimeout(() => { if (!stale() && box.isConnected) prOpenCard(box, repo, number, stale, true).catch(() => {}); }, 15000);
+  }
   const merge = box.querySelector('#prMerge');
   if (merge) merge.onclick = async () => {
     if (!confirm(`${label} #${pr.number} into ${pr.base.ref}?`)) return;

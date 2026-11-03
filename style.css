@@ -397,3 +397,28 @@ button.branch { width: 100%; text-align: left; }
 .seg { display: flex; gap: 4px; padding: 4px; border-radius: 999px; background: var(--surface-2); flex: none; }
 .seg button { min-height: 40px; padding: 0 14px; border-radius: 999px; font-size: 14px; font-weight: 500; color: var(--muted); }
 .seg button[aria-checked="true"] { background: var(--accent); color: var(--on-accent); }
+
+/* PR checks and reviews: quiet rows under the status line, the icon carries the result. */
+.pr-group { margin: 10px 0 0 40px; }
+.pr-checks summary { list-style: none; display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 8px; border-radius: 12px; cursor: pointer; color: var(--muted); font-size: 14px; position: relative; overflow: hidden; isolation: isolate; }
+.pr-checks summary::-webkit-details-marker { display: none; }
+.pr-checks summary span { flex: 1; min-width: 0; }
+.pr-checks .chev { width: 20px; height: 20px; flex: none; transition: transform .2s var(--ease); }
+.pr-checks[open] .chev { transform: rotate(180deg); }
+.ck { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 6px 8px; border-radius: 12px; color: var(--text); font-size: 14px; line-height: 20px; }
+a.ck { position: relative; overflow: hidden; isolation: isolate; }
+@media (hover: hover) { a.ck:hover, .pr-checks summary:hover { background: color-mix(in srgb, var(--text) 5%, transparent); } }
+.ck-icon { width: 18px; height: 18px; flex: none; stroke-width: 2.4; }
+.ck-avatar { width: 22px; height: 22px; border-radius: 50%; flex: none; background: var(--surface-2); margin: 0 -2px; }
+.ck-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.ck-note { flex: none; max-width: 45%; color: var(--muted); font-size: 13px; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ck.ok .ck-icon { color: var(--add); }
+.ck.bad .ck-icon { color: var(--del); }
+.ck.bad .ck-note { color: var(--del); }
+.ck.run .ck-icon { color: var(--star); }
+.ck.skip .ck-icon { color: var(--muted); }
+.ck.skip .ck-name { color: var(--muted); }
+.pr-status.warn { color: var(--text); }
+.pulse { animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .pulse { animation: none; } .pr-checks .chev { transition: none; } }
