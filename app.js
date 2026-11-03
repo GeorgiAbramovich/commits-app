@@ -785,10 +785,9 @@ async function prOpenCard(box, repo, number, stale) {
   }
   if (stale()) return;
   const [tone, status, blocked] = pr.draft ? PR_STATE.draft : PR_STATE[pr.mergeable_state] || ['', 'Checking whether it can merge'];
-  const methods = [['merge', 'Merge commit', repo.allow_merge_commit ?? true], ['squash', 'Squash', repo.allow_squash_merge], ['rebase', 'Rebase', repo.allow_rebase_merge]]
-    .filter(m => m[2]);
-  const key = `method:${repo.full_name}`;
-  let method = methods.find(m => m[0] === store.get(key))?.[0] || methods[0][0];
+  // Always squash, unless the repo has turned squashing off; then whatever it does allow.
+  const [method, label] = [['squash', 'Squash and merge', repo.allow_squash_merge], ['merge', 'Merge', repo.allow_merge_commit], ['rebase', 'Rebase and merge', repo.allow_rebase_merge]]
+    .find(m => m[2] !== false);
 
   box.innerHTML = `
     <section class="pr fade">
@@ -802,19 +801,12 @@ async function prOpenCard(box, repo, number, stale) {
       <div class="pr-status ${tone}"><i aria-hidden="true"></i>${esc(status)}</div>
       ${blocked ? '' : `
       <div class="pr-buttons">
-        ${methods.length > 1 ? `<div class="seg" role="radiogroup" aria-label="Merge method">${methods.map(([m, label]) =>
-          `<button role="radio" data-m="${m}" aria-checked="${m === method}">${label}</button>`).join('')}</div>` : ''}
-        <button class="primary" id="prMerge">Merge</button>
+        <button class="primary" id="prMerge">${label}</button>
       </div>`}
     </section>`;
-  box.querySelectorAll('.seg button').forEach(b => (b.onclick = () => {
-    method = b.dataset.m;
-    store.set(key, method);
-    box.querySelectorAll('.seg button').forEach(x => x.setAttribute('aria-checked', x === b));
-  }));
   const merge = box.querySelector('#prMerge');
   if (merge) merge.onclick = async () => {
-    if (!confirm(`Merge #${pr.number} into ${pr.base.ref}?`)) return;
+    if (!confirm(`${label} #${pr.number} into ${pr.base.ref}?`)) return;
     merge.disabled = true; merge.textContent = 'Merging…';
     try {
       // sha: refuse if someone pushed to the branch since this card loaded.
@@ -825,7 +817,7 @@ async function prOpenCard(box, repo, number, stale) {
       replaceNav(`#/r/${encPath(repo.full_name)}/${enc(pr.base.ref)}`); // see it land
     } catch (err) {
       toast(err.message);
-      merge.disabled = false; merge.textContent = 'Merge';
+      merge.disabled = false; merge.textContent = label;
     }
   };
 }

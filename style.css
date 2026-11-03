@@ -375,8 +375,7 @@ main {
 .pr-buttons { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
 .pr-form .pr-buttons { margin-top: 4px; }
 .pr-buttons .primary { width: auto; margin: 0; padding: 0 24px; }
-.pr-buttons .seg { margin-right: auto; background: var(--bg); }
-.pr .seg button[aria-checked="true"] { background: var(--accent-soft); color: var(--on-accent-soft); }
+.pr > .pr-buttons .primary { flex: 1; }
 .quiet-btn { height: 40px; padding: 0 16px; border-radius: 999px; color: var(--accent); font-size: 14px; font-weight: 500; position: relative; overflow: hidden; isolation: isolate; }
 
 /* Theme picker: a small segmented control. */
