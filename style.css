@@ -350,6 +350,35 @@ main {
   .toast, .ptr.settle, .bar, .file .chev svg { transition: none; }
 }
 
+/* Pull request card: sits between the branch picker and the commits, a tonal step off the page. */
+.pr { background: var(--card); border-radius: var(--radius); padding: 14px 16px 16px; margin: 8px 0 4px; }
+.pr-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.pr-icon { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; flex: none; background: var(--accent-soft); color: var(--on-accent-soft); }
+.pr-icon svg { width: 20px; height: 20px; }
+.pr-text { flex: 1; min-width: 0; }
+.pr-title { display: block; font-weight: 500; font-size: 15px; line-height: 20px; color: var(--text); overflow-wrap: anywhere; }
+.pr-num { color: var(--accent); }
+.pr-sub { color: var(--muted); font-size: 13px; line-height: 18px; margin-top: 2px; }
+.pr-head .text-btn { margin: 0 0 0 auto; }
+.pr-status { display: flex; align-items: center; gap: 8px; margin: 14px 0 0 48px; font-size: 14px; line-height: 20px; color: var(--muted); }
+.pr-status i { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+.pr-status.ok { color: var(--add); }
+.pr-status.ok i { background: var(--add); }
+.pr-status.warn i { background: var(--star); }
+.pr-status.bad { color: var(--del); }
+.pr-status.bad i { background: var(--del); }
+.pr-form { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
+.pr-form .field { font-family: var(--sans); font-size: 15px; background: var(--bg); border-color: var(--line); }
+.pr-form textarea.field { height: auto; padding: 14px 16px; line-height: 22px; resize: vertical; }
+.pr-into { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 14px; }
+.pr-into select { flex: 1; min-width: 0; height: 40px; padding: 0 12px; border-radius: 999px; border: 0; background: var(--bg); color: var(--text); font: 500 14px var(--mono); outline: none; }
+.pr-buttons { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+.pr-form .pr-buttons { margin-top: 4px; }
+.pr-buttons .primary { width: auto; margin: 0; padding: 0 24px; }
+.pr-buttons .seg { margin-right: auto; background: var(--bg); }
+.pr .seg button[aria-checked="true"] { background: var(--accent-soft); color: var(--on-accent-soft); }
+.quiet-btn { height: 40px; padding: 0 16px; border-radius: 999px; color: var(--accent); font-size: 14px; font-weight: 500; position: relative; overflow: hidden; isolation: isolate; }
+
 /* Theme picker: a small segmented control. */
 .theme-row { align-items: center; }
 .seg { display: flex; gap: 4px; padding: 4px; border-radius: 999px; background: var(--surface-2); flex: none; }

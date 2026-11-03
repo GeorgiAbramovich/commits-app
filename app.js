@@ -132,14 +132,18 @@ function tintVars(slot) {
 }
 
 // ---------- GitHub API ----------
-async function gh(path, { fresh = false } = {}) {
-  if (!fresh && cache.has(path)) return cache.get(path);
+// GETs are cached until refresh; anything with a method (POST, PUT) always goes out.
+async function gh(path, { fresh = false, method, body } = {}) {
+  if (!method && !fresh && cache.has(path)) return cache.get(path);
   const res = await fetch(API + path, {
+    method: method || 'GET',
     headers: {
       Authorization: 'Bearer ' + token,
       Accept: 'application/vnd.github+json',
       'X-GitHub-Api-Version': '2022-11-28',
+      ...(body && { 'Content-Type': 'application/json' }),
     },
+    body: body && JSON.stringify(body),
     cache: 'no-store',
   });
   if (res.status === 401) {
@@ -149,13 +153,16 @@ async function gh(path, { fresh = false } = {}) {
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     let msg = body.message || `GitHub returned ${res.status}`;
+    // Validation errors carry the useful part (e.g. "A pull request already exists") in errors[].
+    const detail = body.errors?.map(e => e.message).filter(Boolean).join(' ');
+    if (detail) msg = detail;
     if (res.status === 403 && res.headers.get('x-ratelimit-remaining') === '0') msg = 'GitHub rate limit reached. Try again in a few minutes.';
     else if (res.status === 403 && /SAML|SSO/i.test(msg)) msg = 'This org uses SSO. On github.com, open your token and click "Configure SSO" → Authorize for this org.';
-    else if (res.status === 409) msg = 'This repository is empty.';
+    else if (res.status === 409 && !method) msg = 'This repository is empty.';
     throw new Error(msg);
   }
-  const data = await res.json();
-  cache.set(path, data);
+  const data = res.status === 204 ? null : await res.json();
+  if (!method) cache.set(path, data);
   return data;
 }
 
@@ -368,7 +375,7 @@ addEventListener('touchcancel', () => { pullStart = null; if (!refreshing) pullR
 
 // ---------- ripple ----------
 // Waits a beat on touch so a scroll that starts on a row doesn't flash it.
-const RIPPLE = '.row, .chip, .icon-btn, .text-btn, .pill, .more, .primary, .pin, .branch, .file summary, .toggle-all';
+const RIPPLE = '.row, .chip, .icon-btn, .text-btn, .pill, .more, .primary, .pin, .branch, .file summary, .toggle-all, .quiet-btn';
 document.addEventListener('pointerdown', e => {
   const el = e.target.closest(RIPPLE);
   if (!el || el.disabled || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
@@ -640,9 +647,14 @@ async function repoView(owner, name, branch, stale) {
       <select aria-label="Branch">${names.map(n => `<option${n === branch ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select>
       <svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
     </label>
+    <div id="pr"></div>
     <div id="commits"></div>`;
   view.querySelector('select').onchange = e =>
     replaceNav(`#/r/${enc(owner)}/${enc(name)}/${enc(e.target.value)}`);
+  // Only people who can push get the pull request card; it loads beside the commits, never blocking them.
+  if (branch !== repo.default_branch && repo.permissions?.push) {
+    prCard(view.querySelector('#pr'), repo, branch, names, stale).catch(e => { if (!stale()) showError(e, view.querySelector('#pr')); });
+  }
 
   const key = `seen:${full}@${branch}`;
   if (visit?.key !== key) visit = { key, since: store.get(key, null) };
@@ -678,6 +690,144 @@ async function repoView(owner, name, branch, stale) {
     };
   };
   await loadPage();
+}
+
+// ---------- pull requests ----------
+// On a branch that isn't the default: open a pull request from it, or merge the one that's open.
+const encPath = s => s.split('/').map(enc).join('/');
+const MERGE_ICON = '<svg viewBox="0 0 24 24"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="12" r="2"/><path d="M6 7v10M6 7c0 4 4 5 10 5"/></svg>';
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+async function prCard(box, repo, branch, names, stale) {
+  const p = `/repos/${encPath(repo.full_name)}`;
+  const [open] = await gh(`${p}/pulls?state=open&head=${enc(repo.owner.login + ':' + branch)}&per_page=1`);
+  if (stale()) return;
+  if (open) return prOpenCard(box, repo, open.number, stale);
+
+  let base = repo.default_branch;
+  let cmp = await gh(`${p}/compare/${encPath(base)}...${encPath(branch)}`);
+  if (stale() || !cmp.ahead_by) return; // nothing here that the default branch doesn't have
+  const ahead = () => `${plural(cmp.ahead_by, 'commit')} not in ${base}`;
+
+  box.innerHTML = `
+    <section class="pr fade">
+      <div class="pr-head">
+        <span class="pr-icon" aria-hidden="true">${MERGE_ICON}</span>
+        <div class="pr-text"><div class="pr-title" id="prAhead">${esc(ahead())}</div></div>
+        <button class="text-btn" id="prStart">Open pull request</button>
+      </div>
+    </section>`;
+  box.querySelector('#prStart').onclick = () => {
+    // One commit: its message is the title. More: the branch name, read as words.
+    const first = cmp.commits.length === 1 && cmp.commits[0].commit.message.split('\n')[0];
+    const words = branch.split('/').pop().replace(/[-_]+/g, ' ').trim();
+    const title = first || words.charAt(0).toUpperCase() + words.slice(1);
+    box.querySelector('#prStart').remove();
+    box.querySelector('.pr').insertAdjacentHTML('beforeend', `
+      <form class="pr-form">
+        <label class="pr-into">Into
+          <select aria-label="Base branch">${names.filter(b => b !== branch).map(b => `<option${b === base ? ' selected' : ''}>${esc(b)}</option>`).join('')}</select>
+        </label>
+        <input class="field" name="title" required placeholder="Title" aria-label="Title" value="${esc(title)}">
+        <textarea class="field" name="body" rows="3" placeholder="Description (optional)" aria-label="Description"></textarea>
+        <div class="pr-buttons">
+          <button type="button" class="quiet-btn" id="prCancel">Cancel</button>
+          <button class="primary" id="prCreate">Open pull request</button>
+        </div>
+      </form>`);
+    const form = box.querySelector('form');
+    const create = form.querySelector('#prCreate');
+    form.elements.title.focus();
+    form.querySelector('#prCancel').onclick = () => prCard(box, repo, branch, names, stale);
+    form.querySelector('select').onchange = async e => {
+      base = e.target.value;
+      create.disabled = true;
+      try {
+        cmp = await gh(`${p}/compare/${encPath(base)}...${encPath(branch)}`);
+        box.querySelector('#prAhead').textContent = cmp.ahead_by ? ahead() : `Nothing to merge into ${base}`;
+        create.disabled = !cmp.ahead_by;
+      } catch (err) { toast(err.message); }
+    };
+    form.onsubmit = async e => {
+      e.preventDefault();
+      create.disabled = true; create.textContent = 'Opening…';
+      try {
+        const pr = await gh(`${p}/pulls`, { method: 'POST', body: { title: form.elements.title.value.trim(), body: form.elements.body.value.trim(), head: branch, base } });
+        buzz(10);
+        toast(`Pull request #${pr.number} opened`);
+        await prOpenCard(box, repo, pr.number, stale);
+      } catch (err) {
+        toast(err.message);
+        create.disabled = false; create.textContent = 'Open pull request';
+      }
+    };
+  };
+}
+
+// Where a pull request stands, in GitHub's mergeable_state; only conflicts and drafts can't be tried.
+const PR_STATE = {
+  clean: ['ok', 'Ready to merge'],
+  has_hooks: ['ok', 'Ready to merge'],
+  unstable: ['warn', 'Some checks failed'],
+  behind: ['warn', 'Behind its base branch'],
+  blocked: ['warn', 'Needs approval or passing checks'],
+  dirty: ['bad', 'Has conflicts. Resolve them on GitHub.', true],
+  draft: ['', 'Draft. Mark it ready on GitHub to merge.', true],
+};
+
+async function prOpenCard(box, repo, number, stale) {
+  const p = `/repos/${encPath(repo.full_name)}`;
+  let pr = await gh(`${p}/pulls/${number}`, { fresh: true });
+  // GitHub works mergeability out in the background; ask again a few times while it does.
+  for (let i = 0; i < 4 && pr.mergeable === null && !stale(); i++) {
+    await new Promise(r => setTimeout(r, 1500));
+    pr = await gh(`${p}/pulls/${number}`, { fresh: true });
+  }
+  if (stale()) return;
+  const [tone, status, blocked] = pr.draft ? PR_STATE.draft : PR_STATE[pr.mergeable_state] || ['', 'Checking whether it can merge'];
+  const methods = [['merge', 'Merge commit', repo.allow_merge_commit ?? true], ['squash', 'Squash', repo.allow_squash_merge], ['rebase', 'Rebase', repo.allow_rebase_merge]]
+    .filter(m => m[2]);
+  const key = `method:${repo.full_name}`;
+  let method = methods.find(m => m[0] === store.get(key))?.[0] || methods[0][0];
+
+  box.innerHTML = `
+    <section class="pr fade">
+      <div class="pr-head">
+        <span class="pr-icon" aria-hidden="true">${MERGE_ICON}</span>
+        <div class="pr-text">
+          <a class="pr-title pr-link" href="${esc(pr.html_url)}" target="_blank" rel="noopener"><span class="pr-num">#${pr.number}</span> ${esc(pr.title)}</a>
+          <div class="pr-sub">${esc(plural(pr.commits, 'commit'))} into ${esc(pr.base.ref)}</div>
+        </div>
+      </div>
+      <div class="pr-status ${tone}"><i aria-hidden="true"></i>${esc(status)}</div>
+      ${blocked ? '' : `
+      <div class="pr-buttons">
+        ${methods.length > 1 ? `<div class="seg" role="radiogroup" aria-label="Merge method">${methods.map(([m, label]) =>
+          `<button role="radio" data-m="${m}" aria-checked="${m === method}">${label}</button>`).join('')}</div>` : ''}
+        <button class="primary" id="prMerge">Merge</button>
+      </div>`}
+    </section>`;
+  box.querySelectorAll('.seg button').forEach(b => (b.onclick = () => {
+    method = b.dataset.m;
+    store.set(key, method);
+    box.querySelectorAll('.seg button').forEach(x => x.setAttribute('aria-checked', x === b));
+  }));
+  const merge = box.querySelector('#prMerge');
+  if (merge) merge.onclick = async () => {
+    if (!confirm(`Merge #${pr.number} into ${pr.base.ref}?`)) return;
+    merge.disabled = true; merge.textContent = 'Merging…';
+    try {
+      // sha: refuse if someone pushed to the branch since this card loaded.
+      await gh(`${p}/pulls/${pr.number}/merge`, { method: 'PUT', body: { merge_method: method, sha: pr.head.sha } });
+      buzz(10);
+      toast(`Merged into ${pr.base.ref}`);
+      cache.clear();
+      replaceNav(`#/r/${encPath(repo.full_name)}/${enc(pr.base.ref)}`); // see it land
+    } catch (err) {
+      toast(err.message);
+      merge.disabled = false; merge.textContent = 'Merge';
+    }
+  };
 }
 
 // The name the widget colors by: the GitHub login, or the git author name without one.
