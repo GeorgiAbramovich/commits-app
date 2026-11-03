@@ -222,7 +222,7 @@ let dismiss = null; // closes an overlay that pushed its own entry (see branchPi
 
 function parentOf(hash) {
   const p = hash.replace(/^#\/?/, '').split('?')[0].split('/');
-  if (p[0] === 'c' && p[3]) return `#/r/${p[1]}/${p[2]}`;
+  if ((p[0] === 'c' && p[3]) || (p[0] === 'p' && p[2])) return `#/r/${p[1]}/${p[2]}`;
   if (p[0] === 'r' || p[0] === 'settings') return '#/';
   return null;
 }
@@ -300,6 +300,7 @@ async function route({ keepScroll = false, restoreY = null } = {}) {
     if (parts[0] === 'settings') await settingsView(stale);
     else if (parts[0] === 'r' && parts[2]) await repoView(parts[1], parts[2], parts[3], stale);
     else if (parts[0] === 'c' && parts[3]) await commitView(parts[1], parts[2], parts[3], stale, params.get('tint'));
+    else if (parts[0] === 'p' && parts[2]) await pullsView(parts[1], parts[2], stale);
     else await homeView(stale);
     if (restoreY && !stale()) scrollTo(0, restoreY);
   } catch (e) {
@@ -645,14 +646,22 @@ async function repoView(owner, name, branch, stale) {
   names.sort((a, b) => (a === repo.default_branch ? -1 : b === repo.default_branch ? 1 : a.localeCompare(b)));
 
   view.innerHTML = `
-    <button class="branch fade" id="branchBtn" aria-label="Branch ${esc(branch)}, change branch">
-      ${BRANCH_ICON}<span class="branch-name">${esc(branch)}</span>
-      <svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
-    </button>
+    <div class="branch-bar fade">
+      <button class="branch" id="branchBtn" aria-label="Branch ${esc(branch)}, change branch">
+        ${BRANCH_ICON}<span class="branch-name">${esc(branch)}</span>
+        <svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+    </div>
     <div id="pr"></div>
     <div id="commits"></div>`;
   view.querySelector('#branchBtn').onclick = () =>
     branchPicker(names, branch, repo.default_branch, n => `#/r/${enc(owner)}/${enc(name)}/${enc(n)}`, owner, name);
+  // How many pull requests are open, as a pill beside the branch that opens the list.
+  openPulls(owner, name).then(({ total }) => {
+    if (stale() || !total) return;
+    view.querySelector('.branch-bar')?.insertAdjacentHTML('beforeend', `
+      <a class="branch prs-pill" href="#/p/${enc(owner)}/${enc(name)}" aria-label="${plural(total, 'open pull request')}">${MERGE_ICON}<span>${total > 99 ? "99+" : total} open</span></a>`);
+  }).catch(() => {});
   // Only people who can push get the pull request card; it loads beside the commits, never blocking them.
   if (branch !== repo.default_branch && repo.permissions?.push) {
     prCard(view.querySelector('#pr'), repo, branch, names, stale).catch(e => { if (!stale()) showError(e, view.querySelector('#pr')); });
@@ -684,6 +693,7 @@ async function repoView(owner, name, branch, stale) {
       ? groups.map(g => `<div class="section-label">${esc(g.label)}</div><div class="list timeline">${g.items.map(c => commitRow(c, full, c === all[0], slots.get(authorOf(c)), Date.parse(landed(c)) > since)).join('')}</div>`).join('') +
         (data.length === PAGE ? '<button class="more">Load older commits</button>' : '')
       : '<div class="empty">No commits on this branch</div>';
+    fillDiffstats(owner, name, data, stale);
     const more = box.querySelector('.more');
     if (more) more.onclick = async () => {
       more.textContent = 'Loading…'; more.disabled = true;
@@ -876,7 +886,7 @@ async function prOpenCard(box, repo, number, stale, again = false) {
         <span class="pr-icon" aria-hidden="true">${MERGE_ICON}</span>
         <div class="pr-text">
           <a class="pr-title pr-link" href="${esc(pr.html_url)}" target="_blank" rel="noopener"><span class="pr-num">#${pr.number}</span> ${esc(pr.title)}</a>
-          <div class="pr-sub">${esc(plural(pr.commits, 'commit'))} into ${esc(pr.base.ref)}</div>
+          <div class="pr-sub"><span>${esc(plural(pr.commits, 'commit'))} into ${esc(pr.base.ref)}</span><span class="ds">${diffstat(pr.additions, pr.deletions)}</span></div>
         </div>
       </div>
       <div class="pr-status ${tone}"><i aria-hidden="true"></i>${esc(status)}</div>
@@ -916,6 +926,106 @@ async function prOpenCard(box, repo, number, stale, again = false) {
       merge.disabled = false; merge.textContent = label;
     }
   };
+}
+
+// ---------- line counts ----------
+// GitHub's five squares: green and red in proportion to the lines added and removed. Fewer than
+// five changed lines light up only that many, so a one-line fix doesn't look like a rewrite.
+function diffBar(add, del) {
+  const lit = Math.min(5, add + del);
+  const greens = lit && Math.round((add / (add + del)) * lit);
+  return `<span class="bars" aria-hidden="true">${Array.from({ length: 5 }, (_, i) => `<i${i < greens ? ' class="a"' : i < lit ? ' class="d"' : ''}></i>`).join('')}</span>`;
+}
+const diffstat = (add, del) => `<span class="add">+${add}</span><span class="del">−${del}</span>${diffBar(add, del)}`;
+
+// Lines added and removed per commit for the list. The commit list doesn't carry them, so one GraphQL
+// query fetches a whole page's worth; commits don't change, so they're kept for the session.
+const diffstats = new Map(); // sha -> [additions, deletions]
+async function fillDiffstats(owner, name, commits, stale) {
+  const want = commits.map(c => c.sha).filter(sha => /^[0-9a-f]{40}$/.test(sha) && !diffstats.has(sha));
+  if (want.length) {
+    const query = `query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) {
+      ${want.map((sha, i) => `c${i}: object(oid: "${sha}") { ... on Commit { additions deletions } }`).join('\n')}
+    } }`;
+    try {
+      const res = await gh('/graphql', { method: 'POST', body: { query, variables: { owner, name } } });
+      want.forEach((sha, i) => {
+        const c = res?.data?.repository?.[`c${i}`];
+        if (c && c.additions != null) diffstats.set(sha, [c.additions, c.deletions]);
+      });
+    } catch { return; } // the list reads fine without them
+  }
+  if (stale()) return;
+  view.querySelectorAll('.ds[data-ds]:empty').forEach(el => {
+    const s = diffstats.get(el.dataset.ds);
+    if (s) el.innerHTML = diffstat(...s);
+  });
+}
+
+// ---------- open pull requests ----------
+// The repo's open pull requests, newest activity first, with what the list needs in one query:
+// line counts, CI on the head commit and the review verdict.
+const PULLS_QUERY = `query($owner: String!, $name: String!) {
+  repository(owner: $owner, name: $name) {
+    pullRequests(states: OPEN, first: 50, orderBy: { field: UPDATED_AT, direction: DESC }) {
+      totalCount
+      nodes {
+        number title url isDraft updatedAt additions deletions
+        headRefName baseRefName isCrossRepository reviewDecision
+        author { login avatarUrl }
+        commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
+      }
+    }
+  }
+}`;
+async function openPulls(owner, name) {
+  const key = `/graphql:pulls:${owner}/${name}`;
+  if (cache.has(key)) return cache.get(key);
+  const res = await gh('/graphql', { method: 'POST', body: { query: PULLS_QUERY, variables: { owner, name } } });
+  const prs = res?.data?.repository?.pullRequests;
+  if (!prs) throw new Error(res?.errors?.[0]?.message || "Couldn't load pull requests");
+  const out = { total: prs.totalCount, list: prs.nodes };
+  cache.set(key, out);
+  return out;
+}
+
+const ROLLUP = { SUCCESS: ['ok', 'Checks passed'], FAILURE: ['bad', 'Checks failed'], ERROR: ['bad', 'Checks failed'], PENDING: ['run', 'Checks running'], EXPECTED: ['run', 'Checks running'] };
+const DECISION = { APPROVED: ['ok', 'Approved'], CHANGES_REQUESTED: ['bad', 'Changes requested'], REVIEW_REQUIRED: ['', 'Needs review'] };
+
+async function pullsView(owner, name, stale) {
+  setBar({ title: 'Pull requests', subtitle: `${owner}/${name}`, back: `#/r/${enc(owner)}/${enc(name)}`, refresh: true });
+  view.innerHTML = skeleton(5);
+  const [repo, { total, list }] = await Promise.all([gh(`/repos/${enc(owner)}/${enc(name)}`), openPulls(owner, name)]);
+  if (stale()) return;
+  const slots = authorSlots(list.map(pr => pr.author?.login || 'ghost'));
+  view.innerHTML = list.length ? `
+    <div class="section-label">${plural(total, 'open pull request')}</div>
+    <div class="list prs fade">${list.map(pr => pullRow(pr, owner, name, repo.default_branch, slots.get(pr.author?.login || 'ghost'))).join('')}</div>
+    ${total > list.length ? `<p class="row-desc prs-more">Showing the ${list.length} most recently active. <a href="https://github.com/${enc(owner)}/${enc(name)}/pulls" target="_blank" rel="noopener">See all on GitHub</a></p>` : ''}`
+    : '<div class="empty">No open pull requests</div>';
+}
+
+// Tapping one opens its branch, where the pull request card shows checks and the merge button.
+// A branch in someone's fork isn't here to open, so that one goes to GitHub.
+function pullRow(pr, owner, name, def, slot) {
+  const who = pr.author?.login || 'ghost';
+  const [ci, ciNote] = ROLLUP[pr.commits.nodes[0]?.commit.statusCheckRollup?.state] || [];
+  const [rv, rvNote] = pr.isDraft ? [] : DECISION[pr.reviewDecision] || [];
+  const href = pr.isCrossRepository ? esc(pr.url) : `#/r/${enc(owner)}/${enc(name)}/${enc(pr.headRefName)}`;
+  return `
+    <a class="row" href="${href}"${pr.isCrossRepository ? ' target="_blank" rel="noopener"' : ''} style="${tintVars(slot)}">
+      ${avatar(pr.author?.avatarUrl, who)}
+      <div class="row-main">
+        <div class="commit-msg"><span class="pr-num">#${pr.number}</span> ${esc(pr.title)}</div>
+        <div class="pr-ref">${esc(pr.headRefName)}${pr.baseRefName !== def ? ` <span>into</span> ${esc(pr.baseRefName)}` : ''}</div>
+        <div class="meta">
+          ${pr.isDraft ? '<span class="draft">Draft</span>' : ''}<span class="who">${esc(who)}</span><span>${ago(pr.updatedAt)}</span>
+          ${ci ? `<span class="pr-ci ${ci}"><svg class="ck-icon" viewBox="0 0 24 24" aria-hidden="true">${CHECK_ICONS[ci]}</svg>${ciNote}</span>` : ''}
+          ${rvNote ? `<span class="pr-rv ${rv}">${rvNote}</span>` : ''}
+          <span class="ds">${diffstat(pr.additions, pr.deletions)}</span>
+        </div>
+      </div>
+    </a>`;
 }
 
 // ---------- branches ----------
@@ -1007,10 +1117,11 @@ async function branchOwners(owner, name) {
 // back gesture closes it instead of leaving the repo; picking a branch closes it the same way.
 function branchPicker(names, current, def, hashFor, owner, name) {
   const btn = view.querySelector('#branchBtn');
-  const below = [...view.children].filter(el => el !== btn);
-  btn.hidden = true;
+  const top = btn.closest('.branch-bar') || btn; // the branch pill and the open pull requests beside it
+  const below = [...view.children].filter(el => el !== top);
+  top.hidden = true;
   below.forEach(el => (el.hidden = true));
-  btn.insertAdjacentHTML('afterend', `
+  top.insertAdjacentHTML('afterend', `
     <div class="branch-pick">
       <label class="branch">${BRANCH_ICON}
         <input type="search" placeholder="Find a branch" aria-label="Find a branch" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="go">
@@ -1018,7 +1129,7 @@ function branchPicker(names, current, def, hashFor, owner, name) {
       <div class="chips people" role="radiogroup" aria-label="Whose branches" hidden></div>
       <div class="list branch-list" role="listbox" aria-label="Branches"></div>
     </div>`);
-  const pick = btn.nextElementSibling;
+  const pick = top.nextElementSibling;
   const input = pick.querySelector('input');
   const list = pick.querySelector('.branch-list');
   const wasPull = pullEnabled;
@@ -1028,7 +1139,7 @@ function branchPicker(names, current, def, hashFor, owner, name) {
     pullEnabled = wasPull;
     if (!pick.isConnected) return; // a refresh already redrew the screen
     pick.remove();
-    btn.hidden = false;
+    top.hidden = false;
     below.forEach(el => (el.hidden = false));
   };
   const choose = n => {
@@ -1115,7 +1226,7 @@ function commitRow(c, full, head = false, slot = authorSlot(authorOf(c)), fresh 
       ${avatar(c.author?.avatar_url, who)}
       <div class="row-main">
         <div class="commit-msg">${esc(title)}</div>
-        <div class="meta">${fresh ? '<span class="new">New</span>' : ''}<span class="who">${esc(who)}</span><span>${ago(c.commit.author?.date)}</span><span class="sha">${esc(c.sha.slice(0, 7))}</span></div>
+        <div class="meta">${fresh ? '<span class="new">New</span>' : ''}<span class="who">${esc(who)}</span><span>${ago(c.commit.author?.date)}</span><span class="sha">${esc(c.sha.slice(0, 7))}</span><span class="ds" data-ds="${esc(c.sha)}">${diffstats.has(c.sha) ? diffstat(...diffstats.get(c.sha)) : ''}</span></div>
       </div>
     </a>`;
 }
@@ -1135,10 +1246,6 @@ async function commitView(owner, name, sha, stale, tint) {
   const slot = /^\d$/.test(tint ?? '') ? +tint : authorSlot(who);
   const files = c.files || [];
   const { additions = 0, deletions = 0 } = c.stats || {};
-  const total = additions + deletions || 1;
-  const greens = Math.round((additions / total) * 5);
-  const reds = additions + deletions ? Math.min(5 - greens, Math.round((deletions / total) * 5)) : 0;
-  const bars = Array.from({ length: 5 }, (_, i) => `<i class="${i < greens ? 'a' : i < greens + reds ? 'd' : ''}"></i>`).join('');
   // Small commits open with every diff showing; bigger ones start as a list of files.
   const openAll = files.length <= 3 && additions + deletions < 300;
   const withPatch = files.filter(f => f.patch).length;
@@ -1170,7 +1277,7 @@ async function commitView(owner, name, sha, stale, tint) {
     <div class="stats">
       <span>${files.length} file${files.length === 1 ? '' : 's'}</span>
       <span class="add">+${additions}</span><span class="del">−${deletions}</span>
-      <span class="bars" aria-hidden="true">${bars}</span>
+      ${diffBar(additions, deletions)}
       ${withPatch > 1 ? `<button class="toggle-all" id="toggleAll"></button>` : ''}
     </div>
     <div class="files fade">${files.map(f => fileRow(f, openAll)).join('') || '<div class="empty">No file changes</div>'}</div>
@@ -1265,7 +1372,7 @@ function fileRow(f, open = false) {
           <span class="fname">${esc(base).replace(/([-_.])/g, '$1<wbr>')}</span>
           <span class="fmeta">
             <span class="status ${esc(f.status)}" title="${label}">${letter}</span>
-            <span class="counts">${f.additions ? `<span class="add">+${f.additions}</span>` : ''}${f.deletions ? `<span class="del">−${f.deletions}</span>` : ''}</span>
+            <span class="counts">${f.additions ? `<span class="add">+${f.additions}</span>` : ''}${f.deletions ? `<span class="del">−${f.deletions}</span>` : ''}${f.changes ? diffBar(f.additions, f.deletions) : ''}</span>
             ${dir ? `<em class="fdir">${esc(dir).replace(/\//g, '/<wbr>')}</em>` : ''}
           </span>
         </span>

@@ -431,3 +431,32 @@ a.ck { position: relative; overflow: hidden; isolation: isolate; }
 .branch-row .ck-avatar { width: 24px; height: 24px; margin: 0; align-self: flex-start; margin-top: 1px; }
 .empty .quiet-btn { margin-top: 12px; }
 .people .chip:not(:has(img)) { padding-left: 16px; }
+
+/* Line counts: +added −removed and GitHub's five squares, on commit rows, files and pull requests. */
+.ds { display: inline-flex; align-items: center; gap: 6px; font: 500 12px/16px var(--mono); }
+.ds:empty { display: none; }
+.meta .ds { gap: 6px; }
+.file .counts { align-items: center; }
+.file .counts .bars { margin-left: 2px; }
+.bars i { border-radius: 1.5px; }
+.pr-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 12px; }
+
+/* Open pull requests: a pill beside the branch, and the list it opens. */
+.branch-bar { display: flex; gap: 8px; margin: 4px 0; }
+.branch-bar .branch { margin: 0; }
+button.branch { flex: 1; min-width: 0; }
+.prs-pill { flex: none; gap: 6px; padding: 0 16px 0 14px; font-weight: 500; font-size: 14px; }
+.prs-pill svg { color: var(--accent); }
+.prs .row { --a: var(--al, var(--accent)); }
+[data-theme="dark"] .prs .row { --a: var(--ad, var(--accent)); }
+.prs .row .who { color: var(--a); }
+.prs .pr-num { color: var(--muted); font-weight: 400; }
+.pr-ref { margin-top: 4px; font: 400 12px/16px var(--mono); color: var(--muted); overflow-wrap: anywhere; }
+.pr-ref span { font-family: var(--sans); }
+.meta .draft { padding: 0 8px; border-radius: 999px; background: var(--surface-2); font-size: 11px; }
+.pr-ci .ck-icon { width: 14px; height: 14px; }
+.pr-ci.ok .ck-icon, .pr-rv.ok { color: var(--add); }
+.pr-ci.bad, .pr-rv.bad { color: var(--del); }
+.pr-ci.run .ck-icon { color: var(--star); }
+.prs-more { text-align: center; margin-top: 12px; }
+.prs-more a { color: var(--accent); }
