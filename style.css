@@ -263,7 +263,7 @@ button.branch { width: 100%; text-align: left; }
 .stats { display: flex; gap: 12px; align-items: center; color: var(--muted); font-size: 14px; line-height: 20px; font-weight: 500; margin: 20px 4px 10px 16px; min-height: 40px; }
 .add { color: var(--add); font-weight: 500; }
 .del { color: var(--del); font-weight: 500; }
-.bars { display: inline-flex; gap: 2px; }
+.bars, .meta .bars { display: inline-flex; gap: 3px; }
 .bars i { width: 8px; height: 8px; border-radius: 2px; background: var(--surface-3); }
 .bars i.a { background: var(--add); }
 .bars i.d { background: var(--del); }

@@ -315,6 +315,7 @@ async function refresh() {
   if (refreshing) return;
   refreshing = true;
   cache.clear();
+  for (const k of diffstats.keys()) if (k.includes('#')) diffstats.delete(k); // pull requests grow; commits don't
   ui.refresh.classList.add('spin');
   try { await route({ keepScroll: true }); }
   finally {
@@ -656,11 +657,13 @@ async function repoView(owner, name, branch, stale) {
     <div id="commits"></div>`;
   view.querySelector('#branchBtn').onclick = () =>
     branchPicker(names, branch, repo.default_branch, n => `#/r/${enc(owner)}/${enc(name)}/${enc(n)}`, owner, name);
-  // How many pull requests are open, as a pill beside the branch that opens the list.
-  openPulls(owner, name).then(({ total }) => {
+  // How many pull requests are open, as a pill beside the branch that opens the list. Off the default
+  // branch it drops the word, so the (usually long) branch name keeps the room.
+  openPullCount(owner, name).then(total => {
     if (stale() || !total) return;
+    const count = `${total > 99 ? '99+' : total}${branch === repo.default_branch ? ' open' : ''}`;
     view.querySelector('.branch-bar')?.insertAdjacentHTML('beforeend', `
-      <a class="branch prs-pill" href="#/p/${enc(owner)}/${enc(name)}" aria-label="${plural(total, 'open pull request')}">${MERGE_ICON}<span>${total > 99 ? "99+" : total} open</span></a>`);
+      <a class="branch prs-pill" href="#/p/${enc(owner)}/${enc(name)}" aria-label="${plural(total, 'open pull request')}">${MERGE_ICON}<span>${count}</span></a>`);
   }).catch(() => {});
   // Only people who can push get the pull request card; it loads beside the commits, never blocking them.
   if (branch !== repo.default_branch && repo.permissions?.push) {
@@ -693,7 +696,7 @@ async function repoView(owner, name, branch, stale) {
       ? groups.map(g => `<div class="section-label">${esc(g.label)}</div><div class="list timeline">${g.items.map(c => commitRow(c, full, c === all[0], slots.get(authorOf(c)), Date.parse(landed(c)) > since)).join('')}</div>`).join('') +
         (data.length === PAGE ? '<button class="more">Load older commits</button>' : '')
       : '<div class="empty">No commits on this branch</div>';
-    fillDiffstats(owner, name, data, stale);
+    fillDiffstats(owner, name, data.map(c => c.sha), stale);
     const more = box.querySelector('.more');
     if (more) more.onclick = async () => {
       more.textContent = 'Loading…'; more.disabled = true;
@@ -936,41 +939,47 @@ function diffBar(add, del) {
   const greens = lit && Math.round((add / (add + del)) * lit);
   return `<span class="bars" aria-hidden="true">${Array.from({ length: 5 }, (_, i) => `<i${i < greens ? ' class="a"' : i < lit ? ' class="d"' : ''}></i>`).join('')}</span>`;
 }
-const diffstat = (add, del) => `<span class="add">+${add}</span><span class="del">−${del}</span>${diffBar(add, del)}`;
+const diffstat = (add, del) => `<span class="add">+${add.toLocaleString('en')}</span><span class="del">−${del.toLocaleString('en')}</span>${diffBar(add, del)}`;
 
-// Lines added and removed per commit for the list. The commit list doesn't carry them, so one GraphQL
-// query fetches a whole page's worth; commits don't change, so they're kept for the session.
-const diffstats = new Map(); // sha -> [additions, deletions]
-async function fillDiffstats(owner, name, commits, stale) {
-  const want = commits.map(c => c.sha).filter(sha => /^[0-9a-f]{40}$/.test(sha) && !diffstats.has(sha));
-  if (want.length) {
+// Lines added and removed, for commit rows (by sha) and pull requests (by "owner/name#123"), neither of which
+// the lists carry. GraphQL fills them in after the list shows: five per query with the queries sent
+// together, since one query for a whole page takes GitHub several seconds on a big repo.
+const diffstats = new Map(); // "sha" or "owner/name#number" -> [additions, deletions]
+const dsSpan = key => `<span class="ds" data-ds="${esc(key)}">${diffstats.has(key) ? diffstat(...diffstats.get(key)) : ''}</span>`;
+async function fillDiffstats(owner, name, keys, stale) {
+  const field = k => k.includes('#') ? `pullRequest(number: ${+k.split('#')[1]}) { additions deletions }`
+    : /^[0-9a-f]{40}$/.test(k) && `object(oid: "${k}") { ... on Commit { additions deletions } }`;
+  const want = keys.filter(k => field(k) && !diffstats.has(k));
+  const batches = [];
+  for (let i = 0; i < want.length; i += 5) batches.push(want.slice(i, i + 5));
+  await Promise.all(batches.map(async batch => {
     const query = `query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) {
-      ${want.map((sha, i) => `c${i}: object(oid: "${sha}") { ... on Commit { additions deletions } }`).join('\n')}
+      ${batch.map((k, i) => `k${i}: ${field(k)}`).join('\n')}
     } }`;
     try {
       const res = await gh('/graphql', { method: 'POST', body: { query, variables: { owner, name } } });
-      want.forEach((sha, i) => {
-        const c = res?.data?.repository?.[`c${i}`];
-        if (c && c.additions != null) diffstats.set(sha, [c.additions, c.deletions]);
+      batch.forEach((k, i) => {
+        const c = res?.data?.repository?.[`k${i}`];
+        if (c && c.additions != null) diffstats.set(k, [c.additions, c.deletions]);
       });
     } catch { return; } // the list reads fine without them
-  }
-  if (stale()) return;
-  view.querySelectorAll('.ds[data-ds]:empty').forEach(el => {
-    const s = diffstats.get(el.dataset.ds);
-    if (s) el.innerHTML = diffstat(...s);
-  });
+    if (stale()) return;
+    view.querySelectorAll('.ds[data-ds]:empty').forEach(el => {
+      const s = diffstats.get(el.dataset.ds);
+      if (s) el.innerHTML = diffstat(...s);
+    });
+  }));
 }
 
 // ---------- open pull requests ----------
-// The repo's open pull requests, newest activity first, with what the list needs in one query:
-// line counts, CI on the head commit and the review verdict.
+// The repo's open pull requests, newest activity first, with CI on the head commit and the review
+// verdict. Line counts come after (see fillDiffstats): asking for them here takes GitHub seconds.
 const PULLS_QUERY = `query($owner: String!, $name: String!) {
   repository(owner: $owner, name: $name) {
     pullRequests(states: OPEN, first: 50, orderBy: { field: UPDATED_AT, direction: DESC }) {
       totalCount
       nodes {
-        number title url isDraft updatedAt additions deletions
+        number title url isDraft updatedAt
         headRefName baseRefName isCrossRepository reviewDecision
         author { login avatarUrl }
         commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
@@ -989,6 +998,14 @@ async function openPulls(owner, name) {
   return out;
 }
 
+// Just the number, for the pill on the repo screen; the list itself takes GitHub a while longer.
+async function openPullCount(owner, name) {
+  const list = cache.get(`/graphql:pulls:${owner}/${name}`);
+  if (list) return list.total;
+  const res = await gh('/graphql', { method: 'POST', body: { query: 'query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { pullRequests(states: OPEN) { totalCount } } }', variables: { owner, name } } });
+  return res?.data?.repository?.pullRequests?.totalCount || 0;
+}
+
 const ROLLUP = { SUCCESS: ['ok', 'Checks passed'], FAILURE: ['bad', 'Checks failed'], ERROR: ['bad', 'Checks failed'], PENDING: ['run', 'Checks running'], EXPECTED: ['run', 'Checks running'] };
 const DECISION = { APPROVED: ['ok', 'Approved'], CHANGES_REQUESTED: ['bad', 'Changes requested'], REVIEW_REQUIRED: ['', 'Needs review'] };
 
@@ -1003,6 +1020,7 @@ async function pullsView(owner, name, stale) {
     <div class="list prs fade">${list.map(pr => pullRow(pr, owner, name, repo.default_branch, slots.get(pr.author?.login || 'ghost'))).join('')}</div>
     ${total > list.length ? `<p class="row-desc prs-more">Showing the ${list.length} most recently active. <a href="https://github.com/${enc(owner)}/${enc(name)}/pulls" target="_blank" rel="noopener">See all on GitHub</a></p>` : ''}`
     : '<div class="empty">No open pull requests</div>';
+  fillDiffstats(owner, name, list.map(pr => `${owner}/${name}#${pr.number}`), stale);
 }
 
 // Tapping one opens its branch, where the pull request card shows checks and the merge button.
@@ -1022,7 +1040,7 @@ function pullRow(pr, owner, name, def, slot) {
           ${pr.isDraft ? '<span class="draft">Draft</span>' : ''}<span class="who">${esc(who)}</span><span>${ago(pr.updatedAt)}</span>
           ${ci ? `<span class="pr-ci ${ci}"><svg class="ck-icon" viewBox="0 0 24 24" aria-hidden="true">${CHECK_ICONS[ci]}</svg>${ciNote}</span>` : ''}
           ${rvNote ? `<span class="pr-rv ${rv}">${rvNote}</span>` : ''}
-          <span class="ds">${diffstat(pr.additions, pr.deletions)}</span>
+          ${dsSpan(`${owner}/${name}#${pr.number}`)}
         </div>
       </div>
     </a>`;
@@ -1226,7 +1244,7 @@ function commitRow(c, full, head = false, slot = authorSlot(authorOf(c)), fresh 
       ${avatar(c.author?.avatar_url, who)}
       <div class="row-main">
         <div class="commit-msg">${esc(title)}</div>
-        <div class="meta">${fresh ? '<span class="new">New</span>' : ''}<span class="who">${esc(who)}</span><span>${ago(c.commit.author?.date)}</span><span class="sha">${esc(c.sha.slice(0, 7))}</span><span class="ds" data-ds="${esc(c.sha)}">${diffstats.has(c.sha) ? diffstat(...diffstats.get(c.sha)) : ''}</span></div>
+        <div class="meta">${fresh ? '<span class="new">New</span>' : ''}<span class="who">${esc(who)}</span><span>${ago(c.commit.author?.date)}</span><span class="sha">${esc(c.sha.slice(0, 7))}</span>${dsSpan(c.sha)}</div>
       </div>
     </a>`;
 }
