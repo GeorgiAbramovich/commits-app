@@ -67,7 +67,7 @@ function toast(msg) {
   ui.toast.textContent = msg;
   ui.toast.classList.add('show');
   clearTimeout(toast.t);
-  toast.t = setTimeout(() => ui.toast.classList.remove('show'), 1800);
+  toast.t = setTimeout(() => ui.toast.classList.remove('show'), Math.max(1800, msg.length * 60)); // long messages (errors) stay up longer
 }
 
 function avatar(url, name) {
@@ -814,7 +814,16 @@ async function prOpenCard(box, repo, number, stale) {
       // sha: refuse if someone pushed to the branch since this card loaded.
       await gh(`${p}/pulls/${pr.number}/merge`, { method: 'PUT', body: { merge_method: method, sha: pr.head.sha } });
       buzz(10);
-      toast(`Merged into ${pr.base.ref}`);
+      let note = `Merged into ${pr.base.ref}`;
+      // Then offer to delete the branch, like GitHub's button, unless GitHub does it itself or it lives in a fork.
+      const canPrune = !repo.delete_branch_on_merge && pr.head.repo?.full_name === repo.full_name && pr.head.ref !== repo.default_branch;
+      if (canPrune && confirm(`Merged into ${pr.base.ref}. Delete the branch ${pr.head.ref}?`)) {
+        try {
+          await gh(`${p}/git/refs/heads/${encPath(pr.head.ref)}`, { method: 'DELETE' });
+          note += ` and deleted ${pr.head.ref}`;
+        } catch (err) { note += `. Couldn't delete ${pr.head.ref}: ${err.message}`; }
+      }
+      toast(note);
       cache.clear();
       replaceNav(`#/r/${encPath(repo.full_name)}/${enc(pr.base.ref)}`); // see it land
     } catch (err) {
