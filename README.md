@@ -13,7 +13,7 @@ No backend, no build step, no tracking: just static files that talk to `api.gith
 
 - Switch between your organizations and your own account
 - Repositories sorted by most recent push, with search and pinning
-- Commits grouped by day, with fuzzy branch search and "load older"
+- Commits grouped by day, with fuzzy branch search (filter to your branches or a teammate's) and "load older"
 - Commit details with expandable, colored diffs
 - Pull requests: on a branch other than the default, open one into any branch, see whether it can merge, and squash and merge it
 - Installable on Android: pull to refresh, system back gesture, light and dark theme, opens offline

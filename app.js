@@ -652,7 +652,7 @@ async function repoView(owner, name, branch, stale) {
     <div id="pr"></div>
     <div id="commits"></div>`;
   view.querySelector('#branchBtn').onclick = () =>
-    branchPicker(names, branch, repo.default_branch, n => `#/r/${enc(owner)}/${enc(name)}/${enc(n)}`);
+    branchPicker(names, branch, repo.default_branch, n => `#/r/${enc(owner)}/${enc(name)}/${enc(n)}`, owner, name);
   // Only people who can push get the pull request card; it loads beside the commits, never blocking them.
   if (branch !== repo.default_branch && repo.permissions?.push) {
     prCard(view.querySelector('#pr'), repo, branch, names, stale).catch(e => { if (!stale()) showError(e, view.querySelector('#pr')); });
@@ -964,9 +964,48 @@ function fuzzy(q, s) {
   return { score: score - s.length / 100, hits };
 }
 
+// Who each branch belongs to, as far as GitHub can say (git doesn't record who made a branch): whoever
+// opened its pull request, otherwise the author of its newest commit. Plus when it last moved.
+// One GraphQL query per 100 branches; null if GraphQL isn't available to this token.
+const BRANCH_QUERY = `query($owner: String!, $name: String!, $after: String) {
+  repository(owner: $owner, name: $name) {
+    refs(refPrefix: "refs/heads/", first: 100, after: $after) {
+      pageInfo { hasNextPage endCursor }
+      nodes {
+        name
+        associatedPullRequests(first: 1, states: OPEN) { nodes { author { login avatarUrl } } }
+        target { ... on Commit { committedDate author { name user { login avatarUrl } } } }
+      }
+    }
+  }
+}`;
+const branchInfo = new Map(); // "owner/name" -> Map(branch -> { who, avatar, date }), until refresh
+async function branchOwners(owner, name) {
+  const key = `${owner}/${name}`;
+  if (cache.has('/graphql:' + key)) return branchInfo.get(key);
+  const info = new Map();
+  let after = null;
+  for (let page = 0; page < 10; page++) {
+    const res = await gh('/graphql', { method: 'POST', body: { query: BRANCH_QUERY, variables: { owner, name, after } } });
+    const refs = res?.data?.repository?.refs;
+    if (!refs) throw new Error(res?.errors?.[0]?.message || 'GraphQL unavailable');
+    for (const r of refs.nodes) {
+      const pr = r.associatedPullRequests?.nodes?.[0]?.author;
+      const c = r.target || {};
+      const login = pr?.login || c.author?.user?.login;
+      info.set(r.name, { who: login || c.author?.name || 'unknown', avatar: (pr || c.author?.user)?.avatarUrl, date: c.committedDate });
+    }
+    if (!refs.pageInfo.hasNextPage) break;
+    after = refs.pageInfo.endCursor;
+  }
+  cache.set('/graphql:' + key, true); // refresh clears both
+  branchInfo.set(key, info);
+  return info;
+}
+
 // The branch button opens a search in place of the commits. It gets its own history entry, so the
 // back gesture closes it instead of leaving the repo; picking a branch closes it the same way.
-function branchPicker(names, current, def, hashFor) {
+function branchPicker(names, current, def, hashFor, owner, name) {
   const btn = view.querySelector('#branchBtn');
   const below = [...view.children].filter(el => el !== btn);
   btn.hidden = true;
@@ -976,6 +1015,7 @@ function branchPicker(names, current, def, hashFor) {
       <label class="branch">${BRANCH_ICON}
         <input type="search" placeholder="Find a branch" aria-label="Find a branch" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="go">
       </label>
+      <div class="chips people" role="radiogroup" aria-label="Whose branches" hidden></div>
       <div class="list branch-list" role="listbox" aria-label="Branches"></div>
     </div>`);
   const pick = btn.nextElementSibling;
@@ -1000,24 +1040,54 @@ function branchPicker(names, current, def, hashFor) {
   };
 
   let shown = [];
+  let info = null; // branch -> { who, avatar, date }, once it loads
+  const whoKey = `branchWho:${owner}/${name}`;
+  let who = store.get(whoKey, null); // null = everyone
+  const people = pick.querySelector('.people');
   const draw = () => {
     const q = input.value.toLowerCase().replace(/\s+/g, '');
-    // No query: default branch, then the one you're on, then A to Z.
-    shown = names.map(n => ({ n, m: fuzzy(q, n) })).filter(r => r.m)
-      .sort((a, b) => b.m.score - a.m.score || (b.n === def) - (a.n === def) || (b.n === current) - (a.n === current) || a.n.localeCompare(b.n));
+    const by = who && info ? n => info.get(n)?.who === who : () => true;
+    const when = n => Date.parse(info?.get(n)?.date || 0) || 0;
+    // No query: default branch, then the one you're on, then most recently updated.
+    shown = names.filter(by).map(n => ({ n, m: fuzzy(q, n) })).filter(r => r.m)
+      .sort((a, b) => b.m.score - a.m.score || (b.n === def) - (a.n === def) || (b.n === current) - (a.n === current) || when(b.n) - when(a.n) || a.n.localeCompare(b.n));
     const more = shown.length - 60;
     list.innerHTML = shown.length ? shown.slice(0, 60).map(({ n, m }) => {
       const hit = new Set(m.hits);
       const label = Array.from(n, (ch, i) => (hit.has(i) ? `<mark>${esc(ch)}</mark>` : esc(ch)) + (ch === '/' ? '<wbr>' : '')).join('');
+      const meta = info?.get(n);
       return `<button class="row branch-row" role="option" aria-selected="${n === current}" data-n="${esc(n)}">
-        <span class="branch-label">${label}</span>
+        ${meta ? (meta.avatar ? `<img class="ck-avatar" src="${esc(meta.avatar)}&s=48" alt="" title="${esc(meta.who)}">` : `<span class="ck-avatar initial" title="${esc(meta.who)}">${esc(meta.who.charAt(0).toUpperCase())}</span>`) : ''}
+        <span class="branch-text"><span class="branch-label">${label}</span>${meta?.date ? `<span class="branch-when">${who ? '' : `${esc(meta.who)}, `}${ago(meta.date)}</span>` : ''}</span>
         ${n === def ? '<span class="badge">default</span>' : ''}
         ${n === current ? '<svg class="check" viewBox="0 0 24 24" aria-label="Current branch"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>' : ''}
       </button>`;
     }).join('') + (more > 0 ? `<div class="row branch-more">${more} more. Keep typing to narrow it down.</div>` : '')
-      : `<div class="empty">No branch matches “${esc(input.value.trim())}”</div>`;
+      : `<div class="empty">${q ? `No branch matches “${esc(input.value.trim())}”` : 'No branches here'}${who ? `<br><button class="quiet-btn" data-who="">Show everyone's branches</button>` : ''}</div>`;
   };
-  list.onclick = e => { const row = e.target.closest('[data-n]'); if (row) choose(row.dataset.n); };
+  const drawPeople = me => {
+    const counts = new Map();
+    for (const n of names) { const m = info.get(n); if (m && n !== def) counts.set(m.who, { n: (counts.get(m.who)?.n || 0) + 1, avatar: m.avatar }); }
+    if (who && !counts.has(who)) who = null;
+    const list = [...counts].sort((a, b) => (b[0] === me) - (a[0] === me) || b[1].n - a[1].n || a[0].localeCompare(b[0]));
+    if (list.length < 2) return;
+    people.hidden = false;
+    people.innerHTML = `<button class="chip" role="radio" data-who="" aria-checked="${!who}">Everyone</button>` + list.map(([w, c]) =>
+      `<button class="chip" role="radio" data-who="${esc(w)}" aria-checked="${w === who}">${c.avatar ? `<img src="${esc(c.avatar)}&s=52" alt="">` : ''}${w === me ? 'Mine' : esc(w)}</button>`).join('');
+    people.querySelectorAll('.chip').forEach(c => c.classList.toggle('on', c.getAttribute('aria-checked') === 'true'));
+  };
+  const pickWho = w => {
+    who = w || null;
+    store.set(whoKey, who);
+    people.querySelectorAll('.chip').forEach(c => { const on = (c.dataset.who || null) === who; c.classList.toggle('on', on); c.setAttribute('aria-checked', on); });
+    draw();
+  };
+  people.onclick = e => { const c = e.target.closest('[data-who]'); if (c) { buzz(8); pickWho(c.dataset.who); } };
+  list.onclick = e => {
+    if (e.target.closest('[data-who]')) return pickWho(null);
+    const row = e.target.closest('[data-n]');
+    if (row) choose(row.dataset.n);
+  };
   input.oninput = draw;
   input.onkeydown = e => {
     if (e.key === 'Enter' && shown.length) { e.preventDefault(); choose(shown[0].n); }
@@ -1025,6 +1095,13 @@ function branchPicker(names, current, def, hashFor) {
   };
   draw();
   input.focus();
+  // Owners and dates come in a moment later; the plain list works without them.
+  Promise.all([branchOwners(owner, name), gh('/user')]).then(([map, me]) => {
+    if (!pick.isConnected) return;
+    info = map;
+    drawPeople(me.login);
+    draw();
+  }).catch(() => {});
 }
 
 // The name the widget colors by: the GitHub login, or the git author name without one.

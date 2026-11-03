@@ -422,3 +422,12 @@ a.ck { position: relative; overflow: hidden; isolation: isolate; }
 .pulse { animation: pulse 1.6s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: .35; } }
 @media (prefers-reduced-motion: reduce) { .pulse { animation: none; } .pr-checks .chev { transition: none; } }
+
+/* Branch owners: whose chips under the search, an avatar and "who, when" on each branch. */
+.branch-pick .people { margin: 8px -16px 0; }
+.branch-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.branch-when { color: var(--muted); font-size: 12px; line-height: 16px; }
+.ck-avatar.initial { display: grid; place-items: center; font-size: 11px; font-weight: 500; color: var(--on-accent-soft); background: var(--accent-soft); }
+.branch-row .ck-avatar { width: 24px; height: 24px; margin: 0; align-self: flex-start; margin-top: 1px; }
+.empty .quiet-btn { margin-top: 12px; }
+.people .chip:not(:has(img)) { padding-left: 16px; }
